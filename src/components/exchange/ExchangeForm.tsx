@@ -64,6 +64,8 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
 
   const [buyAmount, setBuyAmount] = useState<bigint>(0n);
   const [slippage, setSlippage] = useState<number | null>(null);
+  const [sellValid, setSellValid] = useState<boolean>(true);
+  const [buyValid, setBuyValid] = useState<boolean>(true);
 
   const buttonLabel = `Swap ${currency} to ${buyTokenSymbol}${
     slippage !== null ? ` with ${slippage.toFixed(2)}% slippage` : ""
@@ -74,7 +76,7 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
     currency === "ETH"
       ? ethBalance !== undefined && amount <= (ethBalance ?? 0n)
       : usdtBalance !== undefined && amount <= (usdtBalance ?? 0n);
-  const canSwap = isValidAmount && hasQuote && hasEnoughBalance;
+  const canSwap = isValidAmount && hasQuote && hasEnoughBalance && sellValid && buyValid;
 
   const provider = useMemo(() => {
     if (!publicClient) return null;
@@ -210,6 +212,7 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
             tokenSymbol={currency}
             decimals={currency === "ETH" ? 18 : usdtDecimals}
             balance={currency === "ETH" ? ethBalance : usdtBalance}
+            onValidChange={setSellValid}
           />
           <TokenAmountField
             value={buyAmount}
@@ -218,6 +221,7 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
             decimals={buyTokenDecimals}
             balance={buyTokenSymbol === "ETH" ? ethBalance : usdtBalance}
             buyMode
+            onValidChange={setBuyValid}
           />
         </Stack>
       </Grid>

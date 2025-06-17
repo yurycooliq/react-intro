@@ -12,6 +12,7 @@ interface TokenAmountFieldProps {
   /** Number of fraction digits – defaults to 18 */
   decimals?: number
   /** Wallet balance – used for copy-to-input and max-value validation  */
+  onValidChange?: (valid: boolean) => void
   balance?: bigint
   /** true → buying mode (label 'Buy', balance non-clickable); false → selling mode */
   buyMode?: boolean
@@ -32,9 +33,15 @@ export default function TokenAmountField({
   decimals = 18,
   balance,
   buyMode = false,
+  onValidChange = () => {},
 }: TokenAmountFieldProps) {
   const [input, setInput] = useState<string>(() => formatUnits(value, decimals))
   const [error, setError] = useState<string>()
+
+  // Notify parent about validity changes
+  useEffect(() => {
+    onValidChange?.(error === undefined)
+  }, [error, onValidChange])
 
   // Keep local string in sync when the external bigint updates (e.g. reset)
   useEffect(() => {
@@ -122,6 +129,7 @@ export default function TokenAmountField({
           placeholder="0.00"
           value={input}
           onChange={handleInputChange}
+          _selection={{ bg: 'blue.500', color: 'white' }}
         />
       </InputGroup>
 
