@@ -1,5 +1,5 @@
 import { Alert, Link } from '@chakra-ui/react'
-import { LuPercent } from 'react-icons/lu'
+import { LuPlane } from 'react-icons/lu'
 import { formatUnits } from 'viem'
 import type { Abi } from 'viem'
 import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi'
@@ -88,7 +88,7 @@ export default function ClaimAlert({ onClaimed }: ClaimAlertProps) {
   return (
     <Alert.Root title="USDT Faucet" status="info" mb={4} opacity={isTxPending ? 0.7 : 1}>
       <Alert.Indicator>
-        <LuPercent />
+        <LuPlane />
       </Alert.Indicator>
       <Alert.Content color="fg">
         <Alert.Title>Where to get USDT token?</Alert.Title>
