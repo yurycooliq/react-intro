@@ -13,11 +13,9 @@ import {
   useWaitForTransactionReceipt,
 } from 'wagmi'
 
-import { MY_TOKEN_ADDRESS } from './ExchangeForm'
-
-const TOKEN_SALE_ADDRESS = MY_TOKEN_ADDRESS // swap target
-const USDT_ADDRESS = '0xYourUSDTAddress' as `0x${string}` // TODO: replace
-const USDT_DECIMALS = 6
+import { useTokenStore } from '../../store/token'
+const USDT_ADDRESS = useTokenStore.getState().usdtAddress
+const USDT_DECIMALS = useTokenStore.getState().usdtDecimals
 
 export type Currency = 'ETH' | 'USDT'
 
@@ -55,7 +53,7 @@ export default function SwapProgress({
         if (currency === 'ETH') {
           setActiveStep(2) // direct swap, skip approve
           const tx = await sendTransactionAsync({
-            to: TOKEN_SALE_ADDRESS,
+            to: USDT_ADDRESS,
             value: parseEther(amount),
           })
           setHashes([tx])
@@ -79,7 +77,7 @@ export default function SwapProgress({
               },
             ] as const,
             functionName: 'approve',
-            args: [TOKEN_SALE_ADDRESS, value],
+            args: [USDT_ADDRESS, value],
           })
           setHashes([approveHash])
 
@@ -101,7 +99,7 @@ export default function SwapProgress({
               },
             ] as const,
             functionName: 'transferFrom',
-            args: [address, TOKEN_SALE_ADDRESS, value],
+            args: [address, USDT_ADDRESS, value],
           })
           setHashes([approveHash, swapHash])
 
