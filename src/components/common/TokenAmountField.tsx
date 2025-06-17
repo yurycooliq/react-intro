@@ -13,10 +13,8 @@ interface TokenAmountFieldProps {
   decimals?: number
   /** Wallet balance – used for copy-to-input and max-value validation  */
   balance?: bigint
-  /** If true, clicking the label will copy the whole balance into the input */
-  copyBalance?: boolean
-  /** Optional custom label – if omitted, a generic one is rendered */
-  label?: string
+  /** true → buying mode (label 'Buy', balance non-clickable); false → selling mode */
+  buyMode?: boolean
 }
 
 /**
@@ -33,8 +31,7 @@ export default function TokenAmountField({
   tokenSymbol,
   decimals = 18,
   balance,
-  copyBalance = false,
-  label,
+  buyMode = false,
 }: TokenAmountFieldProps) {
   const [input, setInput] = useState<string>(() => formatUnits(value, decimals))
   const [error, setError] = useState<string>()
@@ -95,7 +92,7 @@ export default function TokenAmountField({
 
   // Copy full balance into the input when label clicked (if enabled)
   const handleCopyBalance = () => {
-    if (!copyBalance || balance === undefined) return
+    if (buyMode || balance === undefined) return
     const formatted = formatUnits(balance, decimals)
     setInput(formatted)
     setError(undefined)
@@ -107,10 +104,10 @@ export default function TokenAmountField({
   return (
     <Field.Root invalid={!!error}>
       <Field.Label
-        cursor={copyBalance && balance !== undefined ? 'pointer' : undefined}
-        onClick={handleCopyBalance}
+        cursor={!buyMode && balance !== undefined ? 'pointer' : undefined}
+        onClick={!buyMode ? handleCopyBalance : undefined}
       >
-        {label ?? 'Баланс'}{balanceLabel ? `: ${balanceLabel}` : ''}
+        {buyMode ? 'Buy' : 'Sell'}{balanceLabel ? `: ${balanceLabel}` : ''}
       </Field.Label>
 
       <InputGroup endAddon={tokenSymbol}>

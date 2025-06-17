@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Button,
-  HStack,
-  Input,
   Stack,
-  Text,
+  Grid,
+  Center,
+  IconButton,
 } from '@chakra-ui/react'
-import { formatEther } from 'viem'
 import TokenAmountField from '../common/TokenAmountField'
-import { useAccount, useBalance } from 'wagmi'
+import { LuArrowDown } from 'react-icons/lu'
+import { erc20Abi } from 'viem'
+import { useAccount, usePublicClient } from 'wagmi'
 import { useTokenStore } from '../../store/token'
 import ClaimAlert from '../common/ClaimAlert'
 
@@ -24,76 +25,90 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
   const [amount, setAmount] = useState<bigint>(0n)
 
   const { address } = useAccount()
+  const publicClient = usePublicClient()
   const { usdtAddress, usdtDecimals } = useTokenStore()
 
-  const { data: ethBalance } = useBalance({
-    address,
-  })
-  const { data: usdtBalance } = useBalance({
-    address,
-    token: usdtAddress,
-  })
+  const [ethBalance, setEthBalance] = useState<bigint>()
+  const [usdtBalance, setUsdtBalance] = useState<bigint>()
+
+  const fetchBalances = useCallback(async () => {
+    if (!address || !publicClient) return
+    try {
+      const [ethRes, usdtRes] = await Promise.allSettled([
+        publicClient.getBalance({ address }),
+        publicClient.readContract({ address: usdtAddress, abi: erc20Abi, functionName: 'balanceOf', args: [address] }) as Promise<bigint>,
+      ])
+      if (ethRes.status === 'fulfilled') setEthBalance(ethRes.value)
+      if (usdtRes.status === 'fulfilled') setUsdtBalance(usdtRes.value as bigint)
+    } catch (err) {
+      console.error('Failed to fetch balances', err)
+    }
+  }, [address, publicClient, usdtAddress])
+
+  useEffect(() => {
+    fetchBalances()
+    const id = setInterval(fetchBalances, 2000)
+    return () => clearInterval(id)
+  }, [fetchBalances])
   const isValidAmount = amount > 0n
+  const [rotated, setRotated] = useState(false)
+  const buyTokenSymbol: Currency = currency === 'ETH' ? 'USDT' : 'ETH'
+  const buyTokenDecimals = buyTokenSymbol === 'ETH' ? 18 : usdtDecimals
+
+  const handleSwapClick = () => {
+    setCurrency((prev) => (prev === 'ETH' ? 'USDT' : 'ETH'))
+    setRotated((prev) => !prev)
+  }
 
   const handleExchangeClick = () => {
     if (!isValidAmount) return
     onStart(currency, amount.toString())
   }
 
-  const balanceLabel = currency === 'ETH'
-    ? ethBalance
-      ? `${formatEther(ethBalance.value)} ETH`
-      : '-'
-    : usdtBalance
-      ? `${(Number(usdtBalance.value) / 10 ** usdtDecimals).toFixed(2)} USDT`
-      : '-'
-
   return (
     <Box w="full" maxW="md" bg="gray.700" rounded="xl" p={6} shadow="lg" color="white">
-      <ClaimAlert onClaimed={() => usdtBalance?.refetch()} />
-      {/* Currency Toggle */}
-      <HStack mb={4} gap={2}>
-        <Button
-          flex={1}
-          bg={currency === 'ETH' ? 'purple.600' : 'gray.600'}
-          onClick={() => setCurrency('ETH')}
-        >
-          ETH
-        </Button>
-        <Button
-          flex={1}
-          bg={currency === 'USDT' ? 'purple.600' : 'gray.600'}
-          onClick={() => setCurrency('USDT')}
-        >
-          USDT
-        </Button>
-      </HStack>
+      <ClaimAlert onClaimed={fetchBalances} />
 
-      <Text mb={1} fontSize="sm" color="gray.300">
-        Баланс: {balanceLabel}
-      </Text>
 
       {/* Amount Input */}
-      <Stack gap={3}>
-        <TokenAmountField
+      <Grid templateColumns="min-content 1fr" gap={4} alignItems="stretch">
+        <Center>
+          <IconButton
+            rounded="full"
+            aria-label="Change currency"
+            variant="outline"
+            size="xs"
+            onClick={handleSwapClick}
+            transition="transform 0.2s"
+            transform={rotated ? 'rotate(180deg)' : 'rotate(0deg)'}
+          >
+            <LuArrowDown />
+          </IconButton>
+        </Center>
+
+        <Stack gap={3}>
+          <TokenAmountField
             value={amount}
             onChange={setAmount}
             tokenSymbol={currency}
             decimals={currency === 'ETH' ? 18 : usdtDecimals}
-            balance={currency === 'ETH' ? ethBalance?.value : usdtBalance?.value}
-            copyBalance
+            balance={currency === 'ETH' ? ethBalance : usdtBalance}
           />
-
-        {/* Output token input (read-only) */}
-        <HStack>
-          <Input readOnly placeholder="0" />
-          <Text>MYT</Text>
-        </HStack>
-      </Stack>
+          <TokenAmountField
+            value={amount}
+            onChange={() => {}}
+            tokenSymbol={buyTokenSymbol}
+            decimals={buyTokenDecimals}
+            balance={buyTokenSymbol === 'ETH' ? ethBalance : usdtBalance}
+            buyMode
+          />
+        </Stack>
+      </Grid>
 
       <Button
         w="full"
-        colorScheme="green"
+        variant="outline"
+        colorPalette="blue"
         mt={4}
         disabled={!isValidAmount}
         onClick={handleExchangeClick}

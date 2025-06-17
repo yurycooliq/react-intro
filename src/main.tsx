@@ -5,11 +5,16 @@ import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, http } from "wagmi";
 import { sepolia } from "wagmi/chains";
-import { RainbowKitProvider, getDefaultConfig, midnightTheme } from "@rainbow-me/rainbowkit";
+import {
+  RainbowKitProvider,
+  getDefaultConfig,
+  midnightTheme,
+} from "@rainbow-me/rainbowkit";
 import theme from "./theme.ts";
+import { ColorModeProvider } from "./components/ui/color-mode";
 
 import "./index.css";
-import '@rainbow-me/rainbowkit/styles.css';
+import "@rainbow-me/rainbowkit/styles.css";
 
 // Create a shared TanStack Query client (required by RainbowKit)
 const queryClient = new QueryClient();
@@ -26,13 +31,15 @@ const config = getDefaultConfig({
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ChakraProvider value={theme}>
-      <QueryClientProvider client={queryClient}>
-      <WagmiProvider config={config}>
-        <RainbowKitProvider modalSize="compact" theme={midnightTheme()}>
-          <App />
-        </RainbowKitProvider>
-      </WagmiProvider>
-      </QueryClientProvider>
+      <ColorModeProvider forcedTheme="dark">
+        <QueryClientProvider client={queryClient}>
+          <WagmiProvider config={config}>
+            <RainbowKitProvider modalSize="compact" theme={midnightTheme()}>
+              <App />
+            </RainbowKitProvider>
+          </WagmiProvider>
+        </QueryClientProvider>
+      </ColorModeProvider>
     </ChakraProvider>
   </StrictMode>
 );
