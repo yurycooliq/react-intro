@@ -3,7 +3,7 @@ import { Box, Button, Stack, Grid, Center, IconButton } from "@chakra-ui/react";
 import TokenAmountField from "../common/TokenAmountField";
 import { LuArrowDown } from "react-icons/lu";
 import { erc20Abi, type Address } from "viem";
-import quoterAbi from "../../lib/abis/v4Quoter"; // external ABI
+import quoterAbi from "../../lib/abis/v4Quoter";
 import { useAccount, usePublicClient } from "wagmi";
 import { useTokenStore } from "../../store/token";
 import ClaimAlert from "../common/ClaimAlert";
@@ -12,7 +12,6 @@ import { ethers, ZeroAddress } from "ethers";
 // --- Uniswap v4 constants (Sepolia) ---
 const ETH_ADDRESS = ZeroAddress as Address;
 const QUOTER_ADDRESS = "0x61B3f2011A92d183C7dbaDBdA940a7555Ccf9227" as const;
-// Common Uniswap fee tiers & their default tick spacing values (per Uniswap v3/v4 docs)
 const POOL_FEE = 10000; // 1% fee tier
 const TICK_SPACING = 200; // default tick spacing for 1% tier per Uniswap v4 docs
 type Currency = "ETH" | "USDT";
@@ -98,7 +97,9 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
     const tokenIn = currency === "ETH" ? ETH_ADDRESS : usdtAddress;
     const tokenOut = currency === "ETH" ? usdtAddress : ETH_ADDRESS;
     const sellDecimals = currency === "ETH" ? 18 : usdtDecimals;
-    const unitIn = 10n ** BigInt(sellDecimals);
+    // Use a small sample amount (0.001 token) for baseline price to avoid skew when pool liquidity is low.
+    const unitInFull = 10n ** BigInt(sellDecimals);
+    const unitInSample = unitInFull / 1000n === 0n ? 1n : unitInFull / 1000n;
 
     // poolKey requires currencies sorted ascending
     const [currency0, currency1] =
@@ -128,7 +129,7 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
       const { amountOut: amountOutBn } = await quoter.quoteExactInputSingle.staticCall(paramsBase(amount));
       quoted = BigInt(amountOutBn.toString());
 
-      const { amountOut: unitOutBn } = await quoter.quoteExactInputSingle.staticCall(paramsBase(unitIn));
+      const { amountOut: unitOutBn } = await quoter.quoteExactInputSingle.staticCall(paramsBase(unitInSample));
       baseOut = BigInt(unitOutBn.toString());
     } catch (err) {
       // If pool not found or quote reverts, just treat as no quote.
@@ -143,17 +144,19 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
     if (quoted !== null && baseOut !== null) {
       setBuyAmount(quoted);
 
-      const execPrice = Number(quoted) / Number(amount);
-      const basePrice = Number(baseOut) / Number(unitIn);
-      const slip =
-        basePrice === 0 ? null : ((basePrice - execPrice) / basePrice) * 100;
+      const execPrice =
+        (Number(quoted) / 10 ** buyTokenDecimals) /
+        (Number(amount) / 10 ** sellDecimals);
+
+      const basePrice = (Number(baseOut) / 10 ** buyTokenDecimals) / (Number(unitInSample) / 10 ** sellDecimals);
+      const slip = basePrice === 0 ? null : ((basePrice - execPrice) / basePrice) * 100;
       setSlippage(slip);
     } else {
       // no quote
       setBuyAmount(0n);
       setSlippage(null);
     }
-  }, [quoter, amount, currency, usdtAddress, usdtDecimals]);
+  }, [quoter, amount, currency, usdtAddress, usdtDecimals, buyTokenDecimals]);
 
   useEffect(() => {
     fetchQuote();

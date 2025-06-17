@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Field, Input, InputGroup } from '@chakra-ui/react'
+import { Field, Input, InputGroup, Flex } from '@chakra-ui/react'
 import { formatUnits, parseUnits } from 'viem'
 
 interface TokenAmountFieldProps {
@@ -92,7 +92,7 @@ export default function TokenAmountField({
 
   // Copy full balance into the input when label clicked (if enabled)
   const handleCopyBalance = () => {
-    if (buyMode || balance === undefined) return
+    if (balance === undefined) return
     const formatted = formatUnits(balance, decimals)
     setInput(formatted)
     setError(undefined)
@@ -103,11 +103,18 @@ export default function TokenAmountField({
 
   return (
     <Field.Root invalid={!!error}>
-      <Field.Label
-        cursor={!buyMode && balance !== undefined ? 'pointer' : undefined}
-        onClick={!buyMode ? handleCopyBalance : undefined}
-      >
-        {buyMode ? 'Buy' : 'Sell'}{balanceLabel ? `: ${balanceLabel}` : ''}
+      <Field.Label w="full">
+        <Flex w="full" justify="space-between" align="center">
+          <span>{buyMode ? 'Buy' : 'Sell'} {tokenSymbol}</span>
+          {balanceLabel && (
+            <small
+              style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
+              onClick={handleCopyBalance}
+            >
+              {balanceLabel + ' ' + tokenSymbol}
+            </small>
+          )}
+        </Flex>
       </Field.Label>
 
       <InputGroup endAddon={tokenSymbol}>
