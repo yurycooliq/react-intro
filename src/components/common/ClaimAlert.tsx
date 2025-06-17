@@ -91,9 +91,9 @@ export default function ClaimAlert({ onClaimed }: ClaimAlertProps) {
         <LuPlane />
       </Alert.Indicator>
       <Alert.Content color="fg">
-        <Alert.Title>Where to get USDT token?</Alert.Title>
+        <Alert.Title><strong>Get USDT test token first!</strong></Alert.Title>
         <Alert.Description>
-          You have {claimableAmount} USDT tokens to claim.
+          You have {claimableAmount} USDT tokens to claim with this wallet
         </Alert.Description>
       </Alert.Content>
       <Link
