@@ -2,7 +2,7 @@
 
 [![Netlify Status](https://api.netlify.com/api/v1/badges/491d0c9e-0604-4309-95b7-9b39fcd4aa97/deploy-status)](https://app.netlify.com/projects/uniswap-v4-token-swap/deploys)
 
-➡️Live demo: <https://token-swap-dapp.vercel.app/>⬅️
+➡️Live demo: <https://uniswap-v4-token-swap.netlify.app/>⬅️
 
 A decentralized application (DApp) for swapping between ETH and USDT, built with React, TypeScript, Vite, Wagmi, and RainbowKit.
 
