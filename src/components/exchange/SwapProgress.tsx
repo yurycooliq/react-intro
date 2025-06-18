@@ -55,7 +55,9 @@ export default function SwapProgress({
         return;
       }
       pushLog({
-        text: `Swapping ${formatEther(BigInt(amount))} ${currency} to ${formatEther(BigInt(minOut))} ${
+        text: `Swapping ${formatEther(
+          BigInt(amount)
+        )} ${currency} to ${formatEther(BigInt(minOut))} ${
           currency === "ETH" ? "USDT" : "ETH"
         }`,
         variant: "info",
@@ -92,8 +94,9 @@ export default function SwapProgress({
       const receipt = await publicClient.waitForTransactionReceipt({
         hash: txHash,
       });
-      console.debug(receipt);
-      pushLog({ text: "Swap complete", variant: "success" });
+      if (receipt.status === "reverted")
+        pushLog({ text: "Swap reverted 😱", variant: "error" });
+      else pushLog({ text: "Swap complete!", variant: "success" });
     })();
   }, [
     address,
