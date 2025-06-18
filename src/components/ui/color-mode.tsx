@@ -2,47 +2,30 @@
 
 import type { IconButtonProps, SpanProps } from "@chakra-ui/react"
 import { ClientOnly, IconButton, Skeleton, Span } from "@chakra-ui/react"
-import { ThemeProvider, useTheme } from "next-themes"
-import type { ThemeProviderProps } from "next-themes"
-import * as React from "react"
-import { LuMoon, LuSun } from "react-icons/lu"
+import { ThemeProvider } from "next-themes";
+import type { ThemeProviderProps } from "next-themes";
+import * as React from "react";
+import { LuMoon, LuSun } from "react-icons/lu";
 
-export type ColorModeProviderProps = ThemeProviderProps
+// Import only what's needed for internal logic in this file
+import { useColorMode as useInternalColorMode } from "../../hooks/useColorMode";
+
+// Hooks (useColorMode, useColorModeValue) and related types (ColorMode, UseColorModeReturn)
+// are defined in and should be imported directly from: src/hooks/useColorMode.ts
+
+export type ColorModeProviderProps = ThemeProviderProps;
 
 export function ColorModeProvider(props: ColorModeProviderProps) {
   return (
     <ThemeProvider attribute="class" disableTransitionOnChange {...props} />
-  )
+  );
 }
 
-export type ColorMode = "light" | "dark"
-
-export interface UseColorModeReturn {
-  colorMode: ColorMode
-  setColorMode: (colorMode: ColorMode) => void
-  toggleColorMode: () => void
-}
-
-export function useColorMode(): UseColorModeReturn {
-  const { resolvedTheme, setTheme, forcedTheme } = useTheme()
-  const colorMode = forcedTheme || resolvedTheme
-  const toggleColorMode = () => {
-    setTheme(resolvedTheme === "dark" ? "light" : "dark")
-  }
-  return {
-    colorMode: colorMode as ColorMode,
-    setColorMode: setTheme,
-    toggleColorMode,
-  }
-}
-
-export function useColorModeValue<T>(light: T, dark: T) {
-  const { colorMode } = useColorMode()
-  return colorMode === "dark" ? dark : light
-}
+// Hooks (useColorMode, useColorModeValue) and related types (ColorMode, UseColorModeReturn)
+// are defined in and should be imported directly from: src/hooks/useColorMode.ts
 
 export function ColorModeIcon() {
-  const { colorMode } = useColorMode()
+  const { colorMode } = useInternalColorMode() // Use aliased hook
   return colorMode === "dark" ? <LuMoon /> : <LuSun />
 }
 
@@ -52,7 +35,7 @@ export const ColorModeButton = React.forwardRef<
   HTMLButtonElement,
   ColorModeButtonProps
 >(function ColorModeButton(props, ref) {
-  const { toggleColorMode } = useColorMode()
+  const { toggleColorMode } = useInternalColorMode() // Use aliased hook
   return (
     <ClientOnly fallback={<Skeleton boxSize="8" />}>
       <IconButton
