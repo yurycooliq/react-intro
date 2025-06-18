@@ -7,7 +7,6 @@ import ErrorAlert from './components/common/ErrorAlert'
 import WalletConnectPrompt from './components/common/WalletConnectPrompt'
 import ExchangeForm from './components/exchange/ExchangeForm'
 import SwapProgress from './components/exchange/SwapProgress'
-import CompletionMessage from './components/exchange/CompletionMessage'
 
 function App() {
   const { address } = useAccount()
@@ -17,7 +16,6 @@ function App() {
   const [params, setParams] = useState<{ currency: 'ETH' | 'USDT'; amount: string; minOut: string } | null>(
     null
   )
-  const [finalHash, setFinalHash] = useState<`0x${string}` | undefined>()
 
   useEffect(() => {
     if (!address) {
@@ -31,13 +29,6 @@ function App() {
     setParams({ currency, amount, minOut })
     setView('progress')
   }
-
-  const restart = () => {
-    setParams(null)
-    setFinalHash(undefined)
-    setView(address ? 'form' : 'initial')
-  }
-
 
   return (
     <Box minH="100vh" bgGradient="linear(to-b, gray.900, gray.800)" p={4} color="white">

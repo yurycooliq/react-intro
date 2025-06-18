@@ -1,11 +1,15 @@
 import { useEffect, useState, useRef } from "react";
 import { Card, Link, Text, Button, List } from "@chakra-ui/react";
-import { LuCircleCheck, LuCircleDashed, LuCircleX } from "react-icons/lu";
+import {
+  LuCircleCheck,
+  LuCircleDashed,
+  LuCircleX,
+  LuRepeat,
+} from "react-icons/lu";
 import { ZeroAddress, AbiCoder } from "ethers";
 
 import {
   useAccount,
-  useSendTransaction,
   useWriteContract,
   useSignTypedData,
   useChainId,
@@ -39,7 +43,6 @@ export default function SwapProgress({
   onError,
 }: SwapProgressProps) {
   const { address } = useAccount();
-  const { sendTransactionAsync } = useSendTransaction();
   const { writeContractAsync } = useWriteContract();
   const { signTypedDataAsync } = useSignTypedData();
   const chainId = useChainId();
@@ -64,12 +67,76 @@ export default function SwapProgress({
       }
       try {
         if (currency === "ETH") {
-          pushLog({ text: "Direct swap, skipping approval", variant: "info" });
-          const tx = await sendTransactionAsync({
-            to: USDT_ADDRESS,
-            value: BigInt(amount),
+          // --- Build ETH → USDT swap using Universal Router ---
+          pushLog({ text: "Building swap", variant: "info" });
+
+          const value = BigInt(amount);
+          const deadline: bigint = BigInt(Math.floor(Date.now() / 1000) + 3600); // +1 hour
+
+          // Determine pool key ordering and swap direction
+          const tokenIn = ETH_ADDRESS;
+          const tokenOut = USDT_ADDRESS;
+          const [currency0, currency1] =
+            tokenIn.toLowerCase() < tokenOut.toLowerCase()
+              ? [tokenIn, tokenOut]
+              : [tokenOut, tokenIn];
+          const zeroForOne = tokenIn.toLowerCase() === currency0.toLowerCase();
+
+          const amountInStr = value.toString();
+          const abi = AbiCoder.defaultAbiCoder();
+          const actionsHex = "0x060c0f";
+
+          // 1) SWAP_EXACT_IN_SINGLE input
+          const swapInput = abi.encode(
+            [
+              "((address,address,uint24,int24,address),bool,uint128,uint128,bytes)",
+            ],
+            [
+              [
+                [currency0, currency1, POOL_FEE, TICK_SPACING, ZeroAddress],
+                zeroForOne,
+                amountInStr,
+                minOut,
+                "0x",
+              ],
+            ]
+          );
+
+          // 2) SETTLE_ALL input
+          const settleAllInput = abi.encode(
+            ["address", "uint256"],
+            [currency0, amountInStr]
+          );
+
+          // 3) TAKE_ALL input
+          const takeAllInput = abi.encode(
+            ["address", "uint256"],
+            [currency1, "0"]
+          );
+
+          const encodedActions = abi.encode(
+            ["bytes", "bytes[]"],
+            [actionsHex, [swapInput, settleAllInput, takeAllInput]]
+          );
+
+          // Root-level command: 0x10 (V4_SWAP_EXACT_IN)
+          const commandsHex = "0x10" as `0x${string}`;
+          const inputs = [encodedActions as `0x${string}`] as [`0x${string}`];
+
+          const swapHash = await writeContractAsync({
+            address: UNIVERSAL_ROUTER_ADDRESS,
+            abi: universalRouterAbi,
+            functionName: "execute",
+            args: [commandsHex, inputs, deadline],
+            value,
           });
-          pushLog({ text: "Swap transaction sent", variant: "info", hash: tx });
+
+          pushLog({
+            text: "Swap transaction sent",
+            variant: "info",
+            hash: swapHash,
+          });
+          pushLog({ text: "Swap complete", variant: "success" });
         } else {
           pushLog({
             text: "Checking token spending allowance",
@@ -96,7 +163,8 @@ export default function SwapProgress({
           const actionsHex = "0x060c0f";
 
           // ---- Permit2 struct + signature ----
-          const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3" as const;
+          const PERMIT2_ADDRESS =
+            "0x000000000022D473030F116dDEE9F6B43aC78BA3" as const;
           const permitNonce = 0n;
 
           const permitDomain = {
@@ -132,10 +200,30 @@ export default function SwapProgress({
             message: permitMessage,
           });
 
-          // 1) PERMIT2 input (PermitSingle struct + signature)
+          // 1) PERMIT2 input – Universal Router format (TokenPermissions + v,r,s)
+          const r = `0x${permitSig.slice(2, 66)}` as `0x${string}`;
+          const s = `0x${permitSig.slice(66, 130)}` as `0x${string}`;
+          const v = Number("0x" + permitSig.slice(130, 132));
+
           const permitInput = abi.encode(
-            ["((address,uint256),address,uint256,uint256)", "bytes"],
-            [[[USDT_ADDRESS, value], UNIVERSAL_ROUTER_ADDRESS, permitNonce, deadline], permitSig]
+            [
+              "(address,uint160)", // TokenPermissions
+              "address", // spender
+              "uint256", // nonce
+              "uint256", // deadline
+              "uint8", // v
+              "bytes32", // r
+              "bytes32", // s
+            ],
+            [
+              [USDT_ADDRESS, value],
+              UNIVERSAL_ROUTER_ADDRESS,
+              permitNonce,
+              deadline,
+              v,
+              r,
+              s,
+            ]
           );
 
           // 2) SWAP_EXACT_IN_SINGLE input
@@ -173,7 +261,10 @@ export default function SwapProgress({
 
           // Root-level commands: 0x02 (PERMIT2_PERMIT) + 0x10 (V4_SWAP_EXACT_IN)
           const commandsHex = "0x0210" as `0x${string}`;
-          const inputs = [permitInput as `0x${string}`, encodedActions as `0x${string}`] as [`0x${string}`, `0x${string}`];
+          const inputs = [
+            permitInput as `0x${string}`,
+            encodedActions as `0x${string}`,
+          ] as [`0x${string}`, `0x${string}`];
 
           const deadlineBn: bigint = BigInt(
             Math.floor(Date.now() / 1000) + 3600
@@ -210,7 +301,6 @@ export default function SwapProgress({
     amount,
     currency,
     minOut,
-    sendTransactionAsync,
     writeContractAsync,
     chainId,
     signTypedDataAsync,
@@ -227,11 +317,22 @@ export default function SwapProgress({
         <List.Root gap="2" variant="plain" align="center">
           {logs.map((log, index) => {
             const last = index === logs.length - 1;
-            const color = !last ? "green.500" : "gray.400";
+            const color =
+              log.variant === "error"
+                ? "red.500"
+                : log.variant === "info" && last
+                ? "gray.400"
+                : "green.500";
             return (
               <List.Item key={index}>
                 <List.Indicator asChild color={color}>
-                  {!last ? <LuCircleCheck /> : (log.variant === "error") ? <LuCircleX /> : <LuCircleDashed />}
+                  {log.variant === "error" ? (
+                    <LuCircleX />
+                  ) : log.variant === "info" && last ? (
+                    <LuCircleDashed />
+                  ) : (
+                    <LuCircleCheck />
+                  )}
                 </List.Indicator>
                 <Text as="span">
                   {log.text}{" "}
@@ -239,7 +340,7 @@ export default function SwapProgress({
                     <Link
                       href={explorer(log.hash)}
                       target="_blank"
-                      color="purple.300"
+                      color="blue.500"
                     >
                       {`${log.hash.slice(0, 10)}...`}
                     </Link>
@@ -250,8 +351,13 @@ export default function SwapProgress({
           })}
         </List.Root>
         {logs.length > 0 && logs[logs.length - 1].variant !== "info" && (
-          <Button mt={4} onClick={() => window.location.reload()}>
-            Make another swap
+          <Button
+            colorPalette={"blue"}
+            variant="solid"
+            mt={4}
+            onClick={() => window.location.reload()}
+          >
+            <LuRepeat /> Make another swap
           </Button>
         )}
       </Card.Body>
