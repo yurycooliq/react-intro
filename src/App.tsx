@@ -32,11 +32,6 @@ function App() {
     setView('progress')
   }
 
-  const handleComplete = (hash: `0x${string}`) => {
-    setFinalHash(hash)
-    setView('completed')
-  }
-
   const restart = () => {
     setParams(null)
     setFinalHash(undefined)
@@ -57,12 +52,8 @@ function App() {
               currency={params.currency}
               amount={params.amount}
               minOut={params.minOut}
-              onComplete={handleComplete}
               onError={setError}
             />
-          )}
-          {view === 'completed' && (
-            <CompletionMessage hash={finalHash} onRestart={restart} />
           )}
         </Flex>
       </Container>
