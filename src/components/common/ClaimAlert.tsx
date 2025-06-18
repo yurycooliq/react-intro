@@ -6,7 +6,7 @@ import { useAccount, useWriteContract, useReadContract, useWaitForTransactionRec
 import { useState, useEffect } from 'react'
 
 import { useTokenStore } from '../../store/token'
-import erc20Abi from '../../lib/abis/erc20'
+import erc20Abi from '../../abis/erc20'
 
 interface ClaimAlertProps {
   onClaimed?: () => void

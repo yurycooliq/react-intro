@@ -3,7 +3,7 @@ import { Card, Button, Stack, Grid, Center, IconButton, Text } from "@chakra-ui/
 import TokenAmountField from "../common/TokenAmountField";
 import { LuArrowDown } from "react-icons/lu";
 import { erc20Abi, type Address } from "viem";
-import quoterAbi from "../../lib/abis/v4Quoter";
+import quoterAbi from "../../abis/v4Quoter";
 import { useAccount, usePublicClient } from "wagmi";
 import { useTokenStore } from "../../store/token";
 import ClaimAlert from "../common/ClaimAlert";
