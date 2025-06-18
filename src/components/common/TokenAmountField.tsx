@@ -58,19 +58,19 @@ export default function TokenAmountField({
   // Helper that validates and, if valid, calls onChange
   const validateAndCommit = (raw: string) => {
     if (!raw) {
-      setError('Введите число')
+      setError('Enter a number')
       return
     }
 
     // Ensure numeric and max `decimals` fractional digits
     const numMatch = raw.match(/^\d*(?:\.(\d+))?$/)
     if (!numMatch) {
-      setError('Неверный формат')
+      setError('Invalid format')
       return
     }
     const fraction = numMatch[1]
     if (fraction && fraction.length > decimals) {
-      setError(`Максимум ${decimals} знаков после запятой`)
+      setError(`Maximum ${decimals} decimal places`)
       return
     }
 
@@ -78,17 +78,17 @@ export default function TokenAmountField({
     try {
       parsed = parseUnits(raw as `${string}`, decimals)
     } catch {
-      setError('Неверное значение')
+      setError('Invalid value')
       return
     }
 
     if (parsed < 0n) {
-      setError('Значение не может быть отрицательным')
+      setError('Value cannot be negative')
       return
     }
 
     if (balance !== undefined && parsed > balance) {
-      setError('Недостаточно средств')
+      setError('Insufficient balance')
       return
     }
 
