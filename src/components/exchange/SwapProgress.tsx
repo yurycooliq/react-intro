@@ -33,14 +33,12 @@ interface SwapProgressProps {
   currency: Currency;
   amount: string;
   minOut: string;
-  onError: (msg: string) => void;
 }
 
 export default function SwapProgress({
   currency,
   amount,
   minOut,
-  onError,
 }: SwapProgressProps) {
   const { address } = useAccount();
   const { writeContractAsync } = useWriteContract();
@@ -62,7 +60,7 @@ export default function SwapProgress({
     const pushLog = (entry: LogEntry) => setLogs((prev) => [...prev, entry]);
     (async () => {
       if (!address || !publicClient) {
-        onError("Wallet not connected");
+        pushLog({ text: "Wallet not connected", variant: "error" });
         return;
       }
       try {
@@ -293,7 +291,7 @@ export default function SwapProgress({
               (err as { shortMessage?: string; message?: string }).message ??
               "Transaction rejected"
             : "Transaction rejected";
-        onError(msg);
+        pushLog({ text: msg, variant: "error" });
       }
     })();
   }, [
@@ -305,7 +303,6 @@ export default function SwapProgress({
     chainId,
     signTypedDataAsync,
     publicClient,
-    onError,
   ]);
 
   const explorer = (hash: `0x${string}`) =>
