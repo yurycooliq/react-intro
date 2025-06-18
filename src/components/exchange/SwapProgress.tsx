@@ -13,6 +13,7 @@ import {
   useSignTypedData,
   useChainId,
   usePublicClient,
+  useConfig, // Import useConfig
 } from "wagmi";
 import { formatEther } from "viem";
 
@@ -40,6 +41,7 @@ export default function SwapProgress({
   const { signTypedDataAsync } = useSignTypedData();
   const chainId = useChainId();
   const publicClient = usePublicClient();
+  const config = useConfig(); // Get config object
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const hasStarted = useRef(false);
 
@@ -79,6 +81,7 @@ export default function SwapProgress({
             walletAddress: address,
             writeContractAsync,
             signTypedDataAsync,
+            config, // Pass config object
           });
         }
       } catch (err) {
@@ -101,6 +104,7 @@ export default function SwapProgress({
     chainId,
     signTypedDataAsync,
     publicClient,
+    config, // Add config to dependency array
   ]);
 
   const explorer = (hash: `0x${string}`) =>
@@ -112,7 +116,7 @@ export default function SwapProgress({
       case "error":
         return "red.500";
       case "info":
-        return isLastLog(index) ? "gray.400" : "blue.500";
+        return isLastLog(index) ? "gray.400" : "green.500";
       case "success":
         return "green.500";
     }
