@@ -14,7 +14,7 @@ function App() {
 
   const [view, setView] = useState<'initial' | 'form' | 'progress' | 'completed'>('initial')
   const [error, setError] = useState<string | null>(null)
-  const [params, setParams] = useState<{ currency: 'ETH' | 'USDT'; amount: string } | null>(
+  const [params, setParams] = useState<{ currency: 'ETH' | 'USDT'; amount: string; minOut: string } | null>(
     null
   )
   const [finalHash, setFinalHash] = useState<`0x${string}` | undefined>()
@@ -27,8 +27,8 @@ function App() {
     setView('form')
   }, [address])
 
-  const handleStart = (currency: 'ETH' | 'USDT', amount: string) => {
-    setParams({ currency, amount })
+  const handleStart = (currency: 'ETH' | 'USDT', amount: string, minOut: string) => {
+    setParams({ currency, amount, minOut })
     setView('progress')
   }
 
@@ -56,6 +56,7 @@ function App() {
             <SwapProgress
               currency={params.currency}
               amount={params.amount}
+              minOut={params.minOut}
               onComplete={handleComplete}
               onError={setError}
             />

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Box, Button, Stack, Grid, Center, IconButton } from "@chakra-ui/react";
+import { Card, Button, Stack, Grid, Center, IconButton, Text } from "@chakra-ui/react";
 import TokenAmountField from "../common/TokenAmountField";
 import { LuArrowDown } from "react-icons/lu";
 import { erc20Abi, type Address } from "viem";
@@ -18,7 +18,7 @@ type Currency = "ETH" | "USDT";
 
 
 interface ExchangeFormProps {
-  onStart: (currency: Currency, amount: string) => void;
+  onStart: (currency: Currency, amount: string, minOut: string) => void;
 }
 
 export default function ExchangeForm({ onStart }: ExchangeFormProps) {
@@ -63,6 +63,8 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
   const buyTokenDecimals = buyTokenSymbol === "ETH" ? 18 : usdtDecimals;
 
   const [buyAmount, setBuyAmount] = useState<bigint>(0n);
+  // which field was edited last -> determines quoting direction
+  const [lastEdited, setLastEdited] = useState<'sell' | 'buy'>('sell');
   const [slippage, setSlippage] = useState<number | null>(null);
   const [sellValid, setSellValid] = useState<boolean>(true);
   const [buyValid, setBuyValid] = useState<boolean>(true);
@@ -91,11 +93,15 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
   }, [provider]);
 
   const fetchQuote = useCallback(async () => {
-    if (!quoter || amount === 0n) {
+    if (!quoter) return;
+
+    // guard for empty inputs
+    if ((lastEdited === 'sell' && amount === 0n) || (lastEdited === 'buy' && buyAmount === 0n)) {
       setBuyAmount(0n);
       setSlippage(null);
       return;
     }
+
     const tokenIn = currency === "ETH" ? ETH_ADDRESS : usdtAddress;
     const tokenOut = currency === "ETH" ? usdtAddress : ETH_ADDRESS;
     const sellDecimals = currency === "ETH" ? 18 : usdtDecimals;
@@ -110,8 +116,8 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
         : [tokenOut, tokenIn];
     const zeroForOne = tokenIn.toLowerCase() === currency0.toLowerCase();
 
-    let quoted: bigint | null = null;
-    let baseOut: bigint | null = null;
+    let outAmount: bigint | null = null;
+    let sampleOut: bigint | null = null;
 
     const paramsBase = (input: bigint) => ({
       poolKey: {
@@ -127,38 +133,63 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
     });
 
     try {
+      if (lastEdited === 'sell') {
+        // Forward quote: exact input -> output
+        const { amountOut } = await quoter!.quoteExactInputSingle.staticCall(paramsBase(amount))
+        outAmount = BigInt(amountOut.toString())
 
-      const { amountOut: amountOutBn } = await quoter.quoteExactInputSingle.staticCall(paramsBase(amount));
-      quoted = BigInt(amountOutBn.toString());
+        const { amountOut: unitOut } = await quoter!.quoteExactInputSingle.staticCall(paramsBase(unitInSample))
+        sampleOut = BigInt(unitOut.toString())
+      } else {
+        // Reverse quote: exact output (buyAmount) -> required input
+        const { amountIn } = await quoter!.quoteExactOutputSingle.staticCall(paramsBase(buyAmount))
+        const required = BigInt(amountIn.toString())
+        setAmount(required) // sync sell field
 
-      const { amountOut: unitOutBn } = await quoter.quoteExactInputSingle.staticCall(paramsBase(unitInSample));
-      baseOut = BigInt(unitOutBn.toString());
+        // baseline for price/slippage – small sample output
+        const unitOutFull = 10n ** BigInt(buyTokenDecimals)
+        const unitOutSample = unitOutFull / 1000n === 0n ? 1n : unitOutFull / 1000n
+        const { amountIn: baseInSmall } = await quoter!.quoteExactOutputSingle.staticCall(paramsBase(unitOutSample))
+
+        outAmount = buyAmount
+        sampleOut = unitOutSample
+        // use sampleOut & baseInSmall for price calc
+        const baseIn = BigInt(baseInSmall.toString())
+        // compute prices
+        const execPrice = (Number(outAmount) / 10 ** buyTokenDecimals) / (Number(required) / 10 ** sellDecimals)
+        const basePrice = (Number(sampleOut) / 10 ** buyTokenDecimals) / (Number(baseIn) / 10 ** sellDecimals)
+        const slip = basePrice === 0 ? null : ((execPrice - basePrice) / basePrice) * 100
+        setSlippage(slip)
+      }
     } catch (err) {
       // If pool not found or quote reverts, just treat as no quote.
       if (err instanceof Error && err.message.includes("UnexpectedRevertBytes")) {
-        quoted = null;
-        baseOut = null;
+        outAmount = null;
+        sampleOut = null;
       } else {
         console.error(err);
       }
     }
 
-    if (quoted !== null && baseOut !== null) {
-      setBuyAmount(quoted);
+    if (outAmount !== null && sampleOut !== null) {
+      if (lastEdited === 'sell') {
+        setBuyAmount(outAmount);
+      }
 
-      const execPrice =
-        (Number(quoted) / 10 ** buyTokenDecimals) /
-        (Number(amount) / 10 ** sellDecimals);
-
-      const basePrice = (Number(baseOut) / 10 ** buyTokenDecimals) / (Number(unitInSample) / 10 ** sellDecimals);
-      const slip = basePrice === 0 ? null : ((basePrice - execPrice) / basePrice) * 100;
-      setSlippage(slip);
+      if (lastEdited === 'sell') {
+        const execPrice =
+          (Number(outAmount) / 10 ** buyTokenDecimals) /
+          (Number(amount) / 10 ** sellDecimals)
+        const basePrice = (Number(sampleOut) / 10 ** buyTokenDecimals) / (Number(unitInSample) / 10 ** sellDecimals)
+        const slip = basePrice === 0 ? null : ((basePrice - execPrice) / basePrice) * 100
+        setSlippage(slip)
+      }
     } else {
       // no quote
       setBuyAmount(0n);
       setSlippage(null);
     }
-  }, [quoter, amount, currency, usdtAddress, usdtDecimals, buyTokenDecimals]);
+  }, [quoter, amount, buyAmount, lastEdited, currency, usdtAddress, usdtDecimals, buyTokenDecimals]);
 
   useEffect(() => {
     fetchQuote();
@@ -172,70 +203,86 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
     setSlippage(null);
   };
 
+  // handlers passed to amount fields
+  const handleSellAmountChange = (v: bigint) => {
+    setAmount(v)
+    setLastEdited('sell')
+  }
+  const handleBuyAmountChange = (v: bigint) => {
+    setBuyAmount(v)
+    setLastEdited('buy')
+  }
+
   const handleExchangeClick = () => {
     if (!isValidAmount) return;
-    onStart(currency, amount.toString());
+    onStart(currency, amount.toString(), buyAmount.toString());
   };
 
   return (
-    <Box
+    <Card.Root
       w="full"
       maxW="md"
-      bg="gray.700"
       rounded="xl"
-      p={6}
       shadow="lg"
       color="white"
     >
-      <ClaimAlert onClaimed={fetchBalances} />
+      <Card.Header>
+        <Text fontSize="lg" fontWeight="bold">
+          Swap with 🦄Uniswap v4
+        </Text>
+      </Card.Header>
 
-      {/* Amount Input */}
-      <Grid templateColumns="min-content 1fr" gap={4} alignItems="stretch">
-        <Center>
-          <IconButton
-            rounded="full"
-            aria-label="Change currency"
-            variant="outline"
-            size="xs"
-            onClick={handleSwapClick}
-            transition="transform 0.2s"
-            transform={rotated ? "rotate(180deg)" : "rotate(0deg)"}
-          >
-            <LuArrowDown />
-          </IconButton>
-        </Center>
+      <Card.Body>
+        <ClaimAlert onClaimed={fetchBalances} />
+        <Grid templateColumns="min-content 1fr" gap={4} alignItems="stretch">
+          <Center>
+            <IconButton
+              rounded="full"
+              aria-label="Change currency"
+              variant="outline"
+              size="xs"
+              onClick={handleSwapClick}
+              transition="transform 0.2s"
+              transform={rotated ? "rotate(180deg)" : "rotate(0deg)"}
+            >
+              <LuArrowDown />
+            </IconButton>
+          </Center>
 
-        <Stack gap={3}>
-          <TokenAmountField
-            value={amount}
-            onChange={setAmount}
-            tokenSymbol={currency}
-            decimals={currency === "ETH" ? 18 : usdtDecimals}
-            balance={currency === "ETH" ? ethBalance : usdtBalance}
-            onValidChange={setSellValid}
-          />
-          <TokenAmountField
-            value={buyAmount}
-            onChange={() => {}}
-            tokenSymbol={buyTokenSymbol}
-            decimals={buyTokenDecimals}
-            balance={buyTokenSymbol === "ETH" ? ethBalance : usdtBalance}
-            buyMode
-            onValidChange={setBuyValid}
-          />
-        </Stack>
-      </Grid>
+          <Stack gap={3}>
+            <TokenAmountField
+              value={amount}
+              onChange={handleSellAmountChange}
+              tokenSymbol={currency}
+              decimals={currency === "ETH" ? 18 : usdtDecimals}
+              balance={currency === "ETH" ? ethBalance : usdtBalance}
+              onValidChange={setSellValid}
+            />
+            <TokenAmountField
+              value={buyAmount}
+              onChange={handleBuyAmountChange}
+              tokenSymbol={buyTokenSymbol}
+              decimals={buyTokenDecimals}
+              balance={buyTokenSymbol === "ETH" ? ethBalance : usdtBalance}
+              buyMode
+              onValidChange={setBuyValid}
+            />
+          </Stack>
+        </Grid>
+      </Card.Body>
 
-      <Button
-        w="full"
-        variant="outline"
-        colorPalette="blue"
-        mt={4}
-        disabled={!canSwap}
-        onClick={handleExchangeClick}
-      >
-        {buttonLabel}
-      </Button>
-    </Box>
+      <Card.Footer>
+        <Button
+          w="full"
+          variant="outline"
+          colorPalette="blue"
+          mt={4}
+          disabled={!canSwap}
+          onClick={handleExchangeClick}
+        >
+          {buttonLabel}
+        </Button>
+      </Card.Footer>
+    </Card.Root>
   );
 }
