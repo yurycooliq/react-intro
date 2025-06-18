@@ -1,21 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react"; // useMemo removed
 import { Card, Button, Stack, Grid, Center, IconButton, Text } from "@chakra-ui/react";
 import TokenAmountField from "../common/TokenAmountField";
 import { LuArrowDown, LuRocket } from "react-icons/lu";
-import { erc20Abi, type Address } from "viem";
-import quoterAbi from "../../abis/v4Quoter";
+import { erc20Abi, type Address, zeroAddress, type PublicClient } from "viem"; // quoterAbi, ethers, ZeroAddress removed, viemZeroAddress added
 import { useAccount, usePublicClient } from "wagmi";
 import { useTokenStore } from "../../store/token";
 import ClaimAlert from "../common/ClaimAlert";
-import { ethers, ZeroAddress } from "ethers";
+import { getSwapQuote } from "../../services/quoteService";
 
-// --- Uniswap v4 constants (Sepolia) ---
-const ETH_ADDRESS = ZeroAddress as Address;
-const QUOTER_ADDRESS = "0x61B3f2011A92d183C7dbaDBdA940a7555Ccf9227" as const;
-const POOL_FEE = 10000; // 1% fee tier
-const TICK_SPACING = 200; // default tick spacing for 1% tier per Uniswap v4 docs
 type Currency = "ETH" | "USDT";
-
 
 interface ExchangeFormProps {
   onStart: (currency: Currency, amount: string, minOut: string) => void;
@@ -63,9 +56,9 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
   const buyTokenDecimals = buyTokenSymbol === "ETH" ? 18 : usdtDecimals;
 
   const [buyAmount, setBuyAmount] = useState<bigint>(0n);
-  // which field was edited last -> determines quoting direction
   const [lastEdited, setLastEdited] = useState<'sell' | 'buy'>('sell');
   const [slippage, setSlippage] = useState<number | null>(null);
+  const [isQuoting, setIsQuoting] = useState<boolean>(false);
   const [sellValid, setSellValid] = useState<boolean>(true);
   const [buyValid, setBuyValid] = useState<boolean>(true);
 
@@ -78,122 +71,61 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
     currency === "ETH"
       ? ethBalance !== undefined && amount <= (ethBalance ?? 0n)
       : usdtBalance !== undefined && amount <= (usdtBalance ?? 0n);
-  const canSwap = isValidAmount && hasQuote && hasEnoughBalance && sellValid && buyValid;
-
-  const provider = useMemo(() => {
-    if (!publicClient) return null;
-    const url: string | undefined = publicClient?.transport?.url;
-    if (!url) return null;
-    return new ethers.JsonRpcProvider(url);
-  }, [publicClient]);
-
-  const quoter = useMemo(() => {
-    if (!provider) return null;
-    return new ethers.Contract(QUOTER_ADDRESS, quoterAbi, provider);
-  }, [provider]);
-
-  const fetchQuote = useCallback(async () => {
-    if (!quoter) return;
-
-    // guard for empty inputs
-    if ((lastEdited === 'sell' && amount === 0n) || (lastEdited === 'buy' && buyAmount === 0n)) {
-      setBuyAmount(0n);
-      setSlippage(null);
-      return;
-    }
-
-    const tokenIn = currency === "ETH" ? ETH_ADDRESS : usdtAddress;
-    const tokenOut = currency === "ETH" ? usdtAddress : ETH_ADDRESS;
-    const sellDecimals = currency === "ETH" ? 18 : usdtDecimals;
-    // Use a small sample amount (0.001 token) for baseline price to avoid skew when pool liquidity is low.
-    const unitInFull = 10n ** BigInt(sellDecimals);
-    const unitInSample = unitInFull / 1000n === 0n ? 1n : unitInFull / 1000n;
-
-    // poolKey requires currencies sorted ascending
-    const [currency0, currency1] =
-      tokenIn.toLowerCase() < tokenOut.toLowerCase()
-        ? [tokenIn, tokenOut]
-        : [tokenOut, tokenIn];
-    const zeroForOne = tokenIn.toLowerCase() === currency0.toLowerCase();
-
-    let outAmount: bigint | null = null;
-    let sampleOut: bigint | null = null;
-
-    const paramsBase = (input: bigint) => ({
-      poolKey: {
-        currency0: currency0 as Address,
-        currency1: currency1 as Address,
-        fee: POOL_FEE,
-        tickSpacing: TICK_SPACING,
-        hooks: ZeroAddress as Address,
-      },
-      zeroForOne,
-      exactAmount: input.toString(),
-      hookData: "0x",
-    });
-
-    try {
-      if (lastEdited === 'sell') {
-        // Forward quote: exact input -> output
-        const { amountOut } = await quoter!.quoteExactInputSingle.staticCall(paramsBase(amount))
-        outAmount = BigInt(amountOut.toString())
-
-        const { amountOut: unitOut } = await quoter!.quoteExactInputSingle.staticCall(paramsBase(unitInSample))
-        sampleOut = BigInt(unitOut.toString())
-      } else {
-        // Reverse quote: exact output (buyAmount) -> required input
-        const { amountIn } = await quoter!.quoteExactOutputSingle.staticCall(paramsBase(buyAmount))
-        const required = BigInt(amountIn.toString())
-        setAmount(required) // sync sell field
-
-        // baseline for price/slippage – small sample output
-        const unitOutFull = 10n ** BigInt(buyTokenDecimals)
-        const unitOutSample = unitOutFull / 1000n === 0n ? 1n : unitOutFull / 1000n
-        const { amountIn: baseInSmall } = await quoter!.quoteExactOutputSingle.staticCall(paramsBase(unitOutSample))
-
-        outAmount = buyAmount
-        sampleOut = unitOutSample
-        // use sampleOut & baseInSmall for price calc
-        const baseIn = BigInt(baseInSmall.toString())
-        // compute prices
-        const execPrice = (Number(outAmount) / 10 ** buyTokenDecimals) / (Number(required) / 10 ** sellDecimals)
-        const basePrice = (Number(sampleOut) / 10 ** buyTokenDecimals) / (Number(baseIn) / 10 ** sellDecimals)
-        const slip = basePrice === 0 ? null : Math.abs((execPrice - basePrice) / basePrice) * 100
-        setSlippage(slip)
-      }
-    } catch (err) {
-      // If pool not found or quote reverts, just treat as no quote.
-      if (err instanceof Error && err.message.includes("UnexpectedRevertBytes")) {
-        outAmount = null;
-        sampleOut = null;
-      } else {
-        console.error(err);
-      }
-    }
-
-    if (outAmount !== null && sampleOut !== null) {
-      if (lastEdited === 'sell') {
-        setBuyAmount(outAmount);
-      }
-
-      if (lastEdited === 'sell') {
-        const execPrice =
-          (Number(outAmount) / 10 ** buyTokenDecimals) /
-          (Number(amount) / 10 ** sellDecimals)
-        const basePrice = (Number(sampleOut) / 10 ** buyTokenDecimals) / (Number(unitInSample) / 10 ** sellDecimals)
-        const slip = basePrice === 0 ? null : Math.abs((execPrice - basePrice) / basePrice) * 100
-        setSlippage(slip)
-      }
-    } else {
-      // no quote
-      setBuyAmount(0n);
-      setSlippage(null);
-    }
-  }, [quoter, amount, buyAmount, lastEdited, currency, usdtAddress, usdtDecimals, buyTokenDecimals]);
+  const canSwap = isValidAmount && hasQuote && hasEnoughBalance && sellValid && buyValid && !isQuoting;
 
   useEffect(() => {
-    fetchQuote();
-  }, [fetchQuote]);
+    const fetchQuoteAsync = async (client: PublicClient) => {
+      if ((lastEdited === 'sell' && amount === 0n) || (lastEdited === 'buy' && buyAmount === 0n)) {
+        setBuyAmount(0n);
+        setSlippage(null);
+        return;
+      }
+
+      setIsQuoting(true);
+      setSlippage(null);
+
+      const ETH_ADDRESS = zeroAddress as Address;
+      const tokenIn = currency === "ETH" ? ETH_ADDRESS : usdtAddress;
+      const tokenOut = currency === "ETH" ? usdtAddress : ETH_ADDRESS;
+      const currentSellDecimals = currency === "ETH" ? 18 : usdtDecimals;
+      const currentBuyDecimals = buyTokenSymbol === "ETH" ? 18 : usdtDecimals;
+
+      try {
+        const result = await getSwapQuote({
+          publicClient: client,
+          tokenInAddress: tokenIn,
+          tokenOutAddress: tokenOut,
+          amount: lastEdited === 'sell' ? amount : buyAmount,
+          sellDecimals: currentSellDecimals,
+          buyDecimals: currentBuyDecimals,
+          quoteType: lastEdited === 'sell' ? 'exactIn' : 'exactOut' as 'exactIn' | 'exactOut',
+        });
+        if (result) {
+          if (lastEdited === 'sell') {
+            setBuyAmount(result.quotedAmount);
+          } else {
+            setAmount(result.quotedAmount);
+          }
+          setSlippage(result.slippage);
+        } else {
+          if (lastEdited === 'sell') setBuyAmount(0n);
+          else setAmount(0n);
+          setSlippage(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch quote from service:", error);
+        if (lastEdited === 'sell') setBuyAmount(0n);
+        else setAmount(0n);
+        setSlippage(null);
+      }
+      setIsQuoting(false);
+    };
+
+    if (publicClient) {
+      fetchQuoteAsync(publicClient);
+    }
+  }, [publicClient, amount, buyAmount, currency, usdtAddress, usdtDecimals, lastEdited, buyTokenSymbol]); 
+
 
   const handleSwapClick = () => {
     setCurrency((prev) => (prev === "ETH" ? "USDT" : "ETH"));
@@ -203,11 +135,11 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
     setSlippage(null);
   };
 
-  // handlers passed to amount fields
   const handleSellAmountChange = (v: bigint) => {
     setAmount(v)
     setLastEdited('sell')
   }
+
   const handleBuyAmountChange = (v: bigint) => {
     setBuyAmount(v)
     setLastEdited('buy')
@@ -276,6 +208,9 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
           w="full"
           variant="outline"
           colorPalette="blue"
+          loading={isQuoting}
+          loadingText="Estimating slippage..."
+          spinnerPlacement="start"
           mt={4}
           disabled={!canSwap}
           onClick={handleExchangeClick}

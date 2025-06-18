@@ -13,7 +13,7 @@ import {
   useSignTypedData,
   useChainId,
   usePublicClient,
-  useConfig, // Import useConfig
+  useConfig,
 } from "wagmi";
 import { formatEther } from "viem";
 
@@ -41,7 +41,7 @@ export default function SwapProgress({
   const { signTypedDataAsync } = useSignTypedData();
   const chainId = useChainId();
   const publicClient = usePublicClient();
-  const config = useConfig(); // Get config object
+  const config = useConfig();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const hasStarted = useRef(false);
 
@@ -55,7 +55,9 @@ export default function SwapProgress({
         return;
       }
       pushLog({
-        text: `Swapping ${formatEther(BigInt(amount))} ${currency} to ${formatEther(BigInt(minOut))} ${
+        text: `Swapping ${formatEther(
+          BigInt(amount)
+        )} ${currency} to ${formatEther(BigInt(minOut))} ${
           currency === "ETH" ? "USDT" : "ETH"
         }`,
         variant: "info",
@@ -81,7 +83,7 @@ export default function SwapProgress({
             walletAddress: address,
             writeContractAsync,
             signTypedDataAsync,
-            config, // Pass config object
+            config,
           });
         }
       } catch (err) {
@@ -92,8 +94,9 @@ export default function SwapProgress({
       const receipt = await publicClient.waitForTransactionReceipt({
         hash: txHash,
       });
-      console.debug(receipt);
-      pushLog({ text: "Swap complete", variant: "success" });
+      if (receipt.status === "reverted")
+        pushLog({ text: "Swap reverted 😱", variant: "error" });
+      else pushLog({ text: "Swap complete!", variant: "success" });
     })();
   }, [
     address,
