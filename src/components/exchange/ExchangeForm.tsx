@@ -158,7 +158,7 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
         // compute prices
         const execPrice = (Number(outAmount) / 10 ** buyTokenDecimals) / (Number(required) / 10 ** sellDecimals)
         const basePrice = (Number(sampleOut) / 10 ** buyTokenDecimals) / (Number(baseIn) / 10 ** sellDecimals)
-        const slip = basePrice === 0 ? null : ((execPrice - basePrice) / basePrice) * 100
+        const slip = basePrice === 0 ? null : ((basePrice - execPrice) / basePrice) * 100
         setSlippage(slip)
       }
     } catch (err) {
@@ -196,8 +196,8 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
   }, [fetchQuote]);
 
   const handleSwapClick = () => {
-    setCurrency((prev) => (prev === "ETH" ? "USDT" : "ETH"));
-    setRotated((prev) => !prev);
+    setCurrency((prev: Currency) => (prev === "ETH" ? "USDT" : "ETH"));
+    setRotated((prev: boolean) => !prev);
     setAmount(0n);
     setBuyAmount(0n);
     setSlippage(null);
