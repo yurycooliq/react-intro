@@ -18,7 +18,7 @@ The application leverages **Uniswap's Universal Router** for efficient and flexi
 * **Framework**: React
 * **Language**: TypeScript
 * **Build Tool**: Vite
-* **Wallet Integration**: Wagmi, RainbowKit (configured for **Sepolia Testnet**)
+* **Wallet Integration**: Wagmi, Reown, RainbowKit (configured for **Sepolia Testnet**)
 * **UI Library**: Chakra UI
 * **Smart Contract Interaction**:
   * **Ethers.js** (via Wagmi)
