@@ -14,6 +14,7 @@ import {
   useChainId,
   usePublicClient,
 } from "wagmi";
+import { formatEther } from "viem";
 
 export type Currency = "ETH" | "USDT";
 
@@ -51,23 +52,27 @@ export default function SwapProgress({
         pushLog({ text: "Wallet not connected", variant: "error" });
         return;
       }
-      pushLog({ text: "Building swap", variant: "info" });
-      if (currency === "ETH") {
-        try {
-          const txHash = await swapEthToUsdt({
+      pushLog({
+        text: `Swapping ${formatEther(BigInt(amount))} ${currency} to ${formatEther(BigInt(minOut))} ${
+          currency === "ETH" ? "USDT" : "ETH"
+        }`,
+        variant: "info",
+      });
+      let txHash: `0x${string}`;
+      try {
+        if (currency === "ETH") {
+          txHash = await swapEthToUsdt({
             amountInWei: BigInt(amount),
             minOut: BigInt(minOut),
             chainId,
             writeContractAsync,
           });
-          pushLog({ text: "Swap tx sent", variant: "info", hash: txHash });
-        } catch (err) {
-          pushLog({ text: (err as Error).message, variant: "error" });
-          return;
-        }
-      } else {
-        try {
-          const txHash = await swapUsdtToEth({
+        } else {
+          pushLog({
+            text: "Checking USDT token spending allowance",
+            variant: "info",
+          });
+          txHash = await swapUsdtToEth({
             amountIn: BigInt(amount),
             minOut: BigInt(minOut),
             chainId,
@@ -75,12 +80,16 @@ export default function SwapProgress({
             writeContractAsync,
             signTypedDataAsync,
           });
-          pushLog({ text: "Swap tx sent", variant: "info", hash: txHash });
-        } catch (err) {
-          pushLog({ text: (err as Error).message, variant: "error" });
-          return;
         }
+      } catch (err) {
+        pushLog({ text: (err as Error).message, variant: "error" });
+        return;
       }
+      pushLog({ text: "Swap tx sent", variant: "info", hash: txHash });
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: txHash,
+      });
+      console.debug(receipt);
       pushLog({ text: "Swap complete", variant: "success" });
     })();
   }, [
@@ -97,28 +106,33 @@ export default function SwapProgress({
   const explorer = (hash: `0x${string}`) =>
     `https://sepolia.etherscan.io/tx/${hash}`;
 
+  const isLastLog = (index: number): boolean => index === logs.length - 1;
+  const getColor = (variant: LogEntry["variant"], index: number): string => {
+    switch (variant) {
+      case "error":
+        return "red.500";
+      case "info":
+        return isLastLog(index) ? "gray.400" : "blue.500";
+      case "success":
+        return "green.500";
+    }
+  };
+  const getIcon = (variant: LogEntry["variant"], index: number) => {
+    if (variant === "error") return <LuCircleX />;
+    if (variant === "info")
+      return isLastLog(index) ? <LuCircleDashed /> : <LuCircleCheck />;
+    return <LuCircleCheck />;
+  };
+
   return (
     <Card.Root w="360px" rounded="xl" shadow="lg" color="white">
       <Card.Body>
         <List.Root gap="2" variant="plain" align="center">
           {logs.map((log, index) => {
-            const last = index === logs.length - 1;
-            const color =
-              log.variant === "error"
-                ? "red.500"
-                : log.variant === "info" && last
-                ? "gray.400"
-                : "green.500";
             return (
               <List.Item key={index}>
-                <List.Indicator asChild color={color}>
-                  {log.variant === "error" ? (
-                    <LuCircleX />
-                  ) : log.variant === "info" && last ? (
-                    <LuCircleDashed />
-                  ) : (
-                    <LuCircleCheck />
-                  )}
+                <List.Indicator asChild color={getColor(log.variant, index)}>
+                  {getIcon(log.variant, index)}
                 </List.Indicator>
                 <Text as="span">
                   {log.text}{" "}

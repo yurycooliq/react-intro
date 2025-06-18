@@ -2,7 +2,7 @@
 
 A decentralized application (DApp) for swapping between ETH and USDT, built with React, TypeScript, Vite, Wagmi, and RainbowKit.
 
-Live demo: https://token-swap-dapp.vercel.app/
+Live demo: <https://token-swap-dapp.vercel.app/>
 
 ## Description
 

@@ -45,7 +45,7 @@ export default function ClaimAlert({ onClaimed }: ClaimAlertProps) {
     if (!txHash) return
     if (!isMining) {
       if (isTxError) {
-        window.alert('Транзакция не подтверждена')
+        window.alert('Transaction failed')
       } else {
         refetch()
         onClaimed?.()
@@ -80,7 +80,7 @@ export default function ClaimAlert({ onClaimed }: ClaimAlertProps) {
       setTxHash(hash as `0x${string}`)
     } catch (err) {
       console.error(err)
-      window.alert('Ошибка при отправке транзакции')
+      window.alert('Transaction failed')
       setIsTxPending(false)
     }
   }
