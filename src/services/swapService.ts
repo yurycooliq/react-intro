@@ -36,6 +36,7 @@ export interface UsdtToEthParams extends CommonSwapDeps {
   chainId: number;
   walletAddress: `0x${string}`;
   signTypedDataAsync: SignTypedDataMutateAsync<unknown>;
+  config: Config; // Add config here
 }
 
 export async function swapEthToUsdt({
@@ -112,11 +113,12 @@ export async function swapUsdtToEth({
   walletAddress,
   writeContractAsync,
   signTypedDataAsync,
+  config, // Add config here
 }: UsdtToEthParams): Promise<`0x${string}`> {
   const USDT_ADDRESS = useTokenStore.getState().usdtAddress;
 
   // 1. Fetch nonce from Permit2 contract
-  const allowanceData = await readContract(/** wagmiConfig */ {} as Config, { // Pass wagmi config if necessary
+  const allowanceData = await readContract(config, { // Use the passed config
     address: PERMIT2_ADDRESS,
     abi: permit2Abi,
     functionName: "allowance",
@@ -184,8 +186,8 @@ export async function swapUsdtToEth({
   ] as const;
 
   const permitInput = abi.encode(
-    ["(((address,uint160,uint48,uint48),address,uint256)),bytes"],
-    [[permitDataForAbiEncoding], permitSig]
+    ["(((address,uint160,uint48,uint48),address,uint256),bytes)"], // Type for the tuple (PermitSingle, bytes)
+    [[permitDataForAbiEncoding, permitSig]] // Value for the tuple, as a single array element
   );
 
   // Build V4 swap actions (same as above but opposite token direction)

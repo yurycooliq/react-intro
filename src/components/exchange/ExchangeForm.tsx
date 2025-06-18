@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, Button, Stack, Grid, Center, IconButton, Text } from "@chakra-ui/react";
 import TokenAmountField from "../common/TokenAmountField";
-import { LuArrowDown } from "react-icons/lu";
+import { LuArrowDown, LuRocket } from "react-icons/lu";
 import { erc20Abi, type Address } from "viem";
 import quoterAbi from "../../abis/v4Quoter";
 import { useAccount, usePublicClient } from "wagmi";
@@ -280,7 +280,7 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
           disabled={!canSwap}
           onClick={handleExchangeClick}
         >
-          {buttonLabel}
+          <LuRocket /> {buttonLabel}
         </Button>
       </Card.Footer>
     </Card.Root>
