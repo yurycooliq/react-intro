@@ -36,7 +36,7 @@ export interface UsdtToEthParams extends CommonSwapDeps {
   chainId: number;
   walletAddress: `0x${string}`;
   signTypedDataAsync: SignTypedDataMutateAsync<unknown>;
-  config: Config; // Add config here
+  config: Config;
 }
 
 export async function swapEthToUsdt({
@@ -150,33 +150,28 @@ export async function swapUsdtToEth({
     ],
   } as const;
 
-  // Ensure amountIn fits uint160 and deadlines/nonce fit their respective uint types
-  // This should ideally be validated before calling this function or handled here.
-  // For now, direct conversion is assumed valid based on typical usage.
   const permitValue = {
     details: {
       token: USDT_ADDRESS,
-      amount: amountIn, // wagmi will handle BigInt to uint160 if types match
-      expiration: Number(permitDeadline), // Convert to number as expected by PermitSingle.details.expiration
-      nonce: Number(fetchedNonce),       // Convert to number as expected by PermitSingle.details.nonce to uint48
+      amount: amountIn,
+      expiration: Number(permitDeadline),
+      nonce: Number(fetchedNonce),
     },
     spender: UNIVERSAL_ROUTER_ADDRESS,
-    sigDeadline: permitDeadline, // For PermitSingle, this is uint256
+    sigDeadline: permitDeadline,
   } as const;
 
   const permitSig = await signTypedDataAsync({
     domain: permitDomain,
     types: permitTypes,
     primaryType: "PermitSingle",
-    message: permitValue, // Use the new structure for the message
+    message: permitValue,
   });
 
-  // 3. Prepare permitInput for the router
-  // Universal Router expects two sequential parameters: PermitSingle then signature bytes.
   const permitSingleTuple = [
-    [USDT_ADDRESS, amountIn, permitDeadline, fetchedNonce], // PermitDetails (token, amount, expiration, nonce)
-    UNIVERSAL_ROUTER_ADDRESS, // spender
-    permitDeadline, // sigDeadline
+    [USDT_ADDRESS, amountIn, permitDeadline, fetchedNonce],
+    UNIVERSAL_ROUTER_ADDRESS,
+    permitDeadline,
   ] as const;
 
   const permitInput = abi.encode(
@@ -184,7 +179,6 @@ export async function swapUsdtToEth({
     [permitSingleTuple, permitSig]
   );
 
-  // Build V4 swap actions (same as above but opposite token direction)
   const tokenIn = USDT_ADDRESS;
   const tokenOut = ETH_ADDRESS;
   const [currency0, currency1] =
@@ -211,9 +205,6 @@ export async function swapUsdtToEth({
     ]
   );
 
-  // Router must settle the debt on the *input* token (USDT) and then take the
-  // credit on the *output* token (WETH). Using currency0/1 here is wrong if the
-  // pool ordering differs from actual swap direction.
   const tokenInBytes = toCurrency(tokenIn);
   const tokenOutBytes = toCurrency(tokenOut);
 
@@ -226,20 +217,13 @@ export async function swapUsdtToEth({
     [tokenOutBytes, minOut.toString()]
   );
 
-  // Parameters for UNWRAP_WETH: recipient and minimum amount out (0 = accept any)
-  const unwrapInput = abi.encode(
-    ["address", "uint256"],
-    [walletAddress, minOut]
-  );
-
   const encodedActions = abi.encode(
     ["bytes", "bytes[]"],
     [actionsHex, [swapInput, settleAllInput, takeAllInput]]
   );
 
-  const commandsHex = "0x0a100c" as `0x${string}`; // PERMIT + V4_SWAP + UNWRAP_WETH
-  const inputs = [permitInput as `0x${string}`, encodedActions as `0x${string}`, unwrapInput as `0x${string}`] as [
-    `0x${string}`,
+  const commandsHex = "0x0a10" as `0x${string}`;
+  const inputs = [permitInput as `0x${string}`, encodedActions as `0x${string}`] as [
     `0x${string}`,
     `0x${string}`,
   ];
