@@ -158,7 +158,7 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
         // compute prices
         const execPrice = (Number(outAmount) / 10 ** buyTokenDecimals) / (Number(required) / 10 ** sellDecimals)
         const basePrice = (Number(sampleOut) / 10 ** buyTokenDecimals) / (Number(baseIn) / 10 ** sellDecimals)
-        const slip = basePrice === 0 ? null : ((execPrice - basePrice) / basePrice) * 100
+        const slip = basePrice === 0 ? null : Math.abs((execPrice - basePrice) / basePrice) * 100
         setSlippage(slip)
       }
     } catch (err) {
@@ -181,7 +181,7 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
           (Number(outAmount) / 10 ** buyTokenDecimals) /
           (Number(amount) / 10 ** sellDecimals)
         const basePrice = (Number(sampleOut) / 10 ** buyTokenDecimals) / (Number(unitInSample) / 10 ** sellDecimals)
-        const slip = basePrice === 0 ? null : ((basePrice - execPrice) / basePrice) * 100
+        const slip = basePrice === 0 ? null : Math.abs((execPrice - basePrice) / basePrice) * 100
         setSlippage(slip)
       }
     } else {
