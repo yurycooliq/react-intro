@@ -36,7 +36,7 @@ export interface UsdtToEthParams extends CommonSwapDeps {
   chainId: number;
   walletAddress: `0x${string}`;
   signTypedDataAsync: SignTypedDataMutateAsync<unknown>;
-  config: Config; // Add config here
+  config: Config;
 }
 
 export async function swapEthToUsdt({
@@ -150,47 +150,35 @@ export async function swapUsdtToEth({
     ],
   } as const;
 
-  // Ensure amountIn fits uint160 and deadlines/nonce fit their respective uint types
-  // This should ideally be validated before calling this function or handled here.
-  // For now, direct conversion is assumed valid based on typical usage.
   const permitValue = {
     details: {
       token: USDT_ADDRESS,
-      amount: amountIn, // wagmi will handle BigInt to uint160 if types match
-      expiration: Number(permitDeadline), // Convert to number as expected by PermitSingle.details.expiration
-      nonce: Number(fetchedNonce),       // Convert to number as expected by PermitSingle.details.nonce to uint48
+      amount: amountIn,
+      expiration: Number(permitDeadline),
+      nonce: Number(fetchedNonce),
     },
     spender: UNIVERSAL_ROUTER_ADDRESS,
-    sigDeadline: permitDeadline, // For PermitSingle, this is uint256
+    sigDeadline: permitDeadline,
   } as const;
 
   const permitSig = await signTypedDataAsync({
     domain: permitDomain,
     types: permitTypes,
     primaryType: "PermitSingle",
-    message: permitValue, // Use the new structure for the message
+    message: permitValue,
   });
 
-  // 3. Prepare permitInput for the router
-  // This structure must match what the UNIVERSAL_ROUTER_ADDRESS execute command 0x0a10 expects.
-  // Based on the new EIP-712 types:
-  const permitDataForAbiEncoding = [
-    [
-      USDT_ADDRESS,
-      amountIn,         // uint160
-      permitDeadline,   // uint48 (for details.expiration)
-      fetchedNonce,     // uint48 (for details.nonce)
-    ],
-    UNIVERSAL_ROUTER_ADDRESS, // address (for spender)
-    permitDeadline,           // uint256 (for sigDeadline)
+  const permitSingleTuple = [
+    [USDT_ADDRESS, amountIn, permitDeadline, fetchedNonce],
+    UNIVERSAL_ROUTER_ADDRESS,
+    permitDeadline,
   ] as const;
 
   const permitInput = abi.encode(
-    ["(((address,uint160,uint48,uint48),address,uint256),bytes)"], // Type for the tuple (PermitSingle, bytes)
-    [[permitDataForAbiEncoding, permitSig]] // Value for the tuple, as a single array element
+    ["((address,uint160,uint48,uint48),address,uint256)", "bytes"],
+    [permitSingleTuple, permitSig]
   );
 
-  // Build V4 swap actions (same as above but opposite token direction)
   const tokenIn = USDT_ADDRESS;
   const tokenOut = ETH_ADDRESS;
   const [currency0, currency1] =
@@ -217,13 +205,16 @@ export async function swapUsdtToEth({
     ]
   );
 
+  const tokenInBytes = toCurrency(tokenIn);
+  const tokenOutBytes = toCurrency(tokenOut);
+
   const settleAllInput = abi.encode(
     ["bytes32", "uint256"],
-    [currency0Bytes, amountIn.toString()]
+    [tokenInBytes, amountIn.toString()]
   );
   const takeAllInput = abi.encode(
     ["bytes32", "uint256"],
-    [currency1Bytes, minOut.toString()]
+    [tokenOutBytes, minOut.toString()]
   );
 
   const encodedActions = abi.encode(
@@ -231,10 +222,10 @@ export async function swapUsdtToEth({
     [actionsHex, [swapInput, settleAllInput, takeAllInput]]
   );
 
-  const commandsHex = "0x0a10" as `0x${string}`; // PERMIT + V4_SWAP
+  const commandsHex = "0x0a10" as `0x${string}`;
   const inputs = [permitInput as `0x${string}`, encodedActions as `0x${string}`] as [
     `0x${string}`,
-    `0x${string}`
+    `0x${string}`,
   ];
 
   const txDeadline: bigint = BigInt(Math.floor(Date.now() / 1000) + 3600);
