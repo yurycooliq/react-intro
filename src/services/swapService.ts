@@ -172,22 +172,16 @@ export async function swapUsdtToEth({
   });
 
   // 3. Prepare permitInput for the router
-  // This structure must match what the UNIVERSAL_ROUTER_ADDRESS execute command 0x0a10 expects.
-  // Based on the new EIP-712 types:
-  const permitDataForAbiEncoding = [
-    [
-      USDT_ADDRESS,
-      amountIn,         // uint160
-      permitDeadline,   // uint48 (for details.expiration)
-      fetchedNonce,     // uint48 (for details.nonce)
-    ],
-    UNIVERSAL_ROUTER_ADDRESS, // address (for spender)
-    permitDeadline,           // uint256 (for sigDeadline)
+  // Universal Router expects two sequential parameters: PermitSingle then signature bytes.
+  const permitSingleTuple = [
+    [USDT_ADDRESS, amountIn, permitDeadline, fetchedNonce], // PermitDetails (token, amount, expiration, nonce)
+    UNIVERSAL_ROUTER_ADDRESS, // spender
+    permitDeadline, // sigDeadline
   ] as const;
 
   const permitInput = abi.encode(
-    ["(((address,uint160,uint48,uint48),address,uint256),bytes)"], // Type for the tuple (PermitSingle, bytes)
-    [[permitDataForAbiEncoding, permitSig]] // Value for the tuple, as a single array element
+    ["((address,uint160,uint48,uint48),address,uint256)", "bytes"],
+    [permitSingleTuple, permitSig]
   );
 
   // Build V4 swap actions (same as above but opposite token direction)
@@ -217,13 +211,25 @@ export async function swapUsdtToEth({
     ]
   );
 
+  // Router must settle the debt on the *input* token (USDT) and then take the
+  // credit on the *output* token (WETH). Using currency0/1 here is wrong if the
+  // pool ordering differs from actual swap direction.
+  const tokenInBytes = toCurrency(tokenIn);
+  const tokenOutBytes = toCurrency(tokenOut);
+
   const settleAllInput = abi.encode(
     ["bytes32", "uint256"],
-    [currency0Bytes, amountIn.toString()]
+    [tokenInBytes, amountIn.toString()]
   );
   const takeAllInput = abi.encode(
     ["bytes32", "uint256"],
-    [currency1Bytes, minOut.toString()]
+    [tokenOutBytes, minOut.toString()]
+  );
+
+  // Parameters for UNWRAP_WETH: recipient and minimum amount out (0 = accept any)
+  const unwrapInput = abi.encode(
+    ["address", "uint256"],
+    [walletAddress, minOut]
   );
 
   const encodedActions = abi.encode(
@@ -231,10 +237,11 @@ export async function swapUsdtToEth({
     [actionsHex, [swapInput, settleAllInput, takeAllInput]]
   );
 
-  const commandsHex = "0x0a10" as `0x${string}`; // PERMIT + V4_SWAP
-  const inputs = [permitInput as `0x${string}`, encodedActions as `0x${string}`] as [
+  const commandsHex = "0x0a100c" as `0x${string}`; // PERMIT + V4_SWAP + UNWRAP_WETH
+  const inputs = [permitInput as `0x${string}`, encodedActions as `0x${string}`, unwrapInput as `0x${string}`] as [
     `0x${string}`,
-    `0x${string}`
+    `0x${string}`,
+    `0x${string}`,
   ];
 
   const txDeadline: bigint = BigInt(Math.floor(Date.now() / 1000) + 3600);

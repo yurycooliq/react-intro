@@ -27,7 +27,7 @@ The application leverages **Uniswap's Universal Router** for efficient and flexi
 
 ## Prerequisites
 
-* Node.js (v18.x or later recommended)
+* Node.js (v20.x or later recommended)
 * npm or yarn
 * A modern web browser with a crypto wallet extension (e.g., MetaMask)
 
