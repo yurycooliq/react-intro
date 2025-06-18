@@ -6,7 +6,7 @@
 
 A decentralized application (DApp) for swapping between ETH and USDT, built with React, TypeScript, Vite, Wagmi, and RainbowKit.
 
-USDTest (USDT) is a testnet token on the Sepolia testnet. Check the source on [Etherscan](https://sepolia.etherscan.io/address/0xbAce3798896B6e8dcBBe26B7A698150c98ba67d0).
+USDTest (**USDT**) is a testnet token on the **Sepolia testnet**. Check the source on [Etherscan](https://sepolia.etherscan.io/address/0xbAce3798896B6e8dcBBe26B7A698150c98ba67d0).
 
 ## Description
 
@@ -21,7 +21,7 @@ The application leverages **Uniswap's Universal Router** for efficient and flexi
 * **Wallet Integration**: Wagmi, RainbowKit (configured for **Sepolia Testnet**)
 * **UI Library**: Chakra UI
 * **Smart Contract Interaction**:
-  * Ethers.js (via Wagmi)
+  * **Ethers.js** (via Wagmi)
   * **Uniswap V4** (for swap execution)
   * **EIP-2612 Permit Signatures** (for token approvals)
 
