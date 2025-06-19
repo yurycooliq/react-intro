@@ -36,7 +36,7 @@ The application leverages **Uniswap's Universal Router** for efficient and flexi
 To run this project, you need to create a `.env` file in the root directory and add the following environment variables:
 
 ```env
-# WalletConnect Project ID (get yours from https://cloud.walletconnect.com)
+# Reown (WalletConnect) Project ID (get yours from https://cloud.reown.com/)
 VITE_WALLETCONNECT_PROJECT_ID="YOUR_WALLETCONNECT_PROJECT_ID"
 
 # USDT Token Address on the Sepolia test network
