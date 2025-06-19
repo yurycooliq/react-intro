@@ -1,28 +1,60 @@
+/**
+ * Quote Service
+ * ---------------
+ * This module provides a single helper – `getSwapQuote` – that talks to the
+ * Uniswap v4 quoter contract on Sepolia and returns an estimated swap amount
+ * together with the calculated slippage.  It is intentionally **framework-free**
+ * and can therefore be consumed by React components, Vue composables or any
+ * other context.
+ *
+ * Key design points:
+ * • Pure function – no React hooks inside, no hidden state.
+ * • Uses the viem `PublicClient` already configured in the dApp to avoid
+ *   duplicating RPC-URL management.
+ * • Falls back gracefully: if the client is missing or the user passes an
+ *   amount of 0, we return `null`/`0n` without throwing.
+ * • Typed end-to-end – the input/output contracts are expressed via the
+ *   `QuoteParams` and `QuoteResult` interfaces living in `src/interfaces`.
+ */
+
 import { ethers } from "ethers";
-import type { Address, PublicClient } from "viem";
+import type { Address } from "viem";
 import quoterAbi from "../abis/v4Quoter";
+import type { QuoteParams, QuoteResult } from "../interfaces";
+import { QUOTER_ADDRESS, POOL_FEE, TICK_SPACING } from "../config/blockchain";
 
-// --- Uniswap v4 constants (Sepolia) ---
-const QUOTER_ADDRESS = "0x61B3f2011A92d183C7dbaDBdA940a7555Ccf9227" as const;
-const POOL_FEE = 10000; // 1% fee tier
-const TICK_SPACING = 200; // default tick spacing for 1% tier per Uniswap v4 docs
-
-// --- Types ---
-export interface QuoteParams {
-  publicClient: PublicClient;
-  tokenInAddress: Address;
-  tokenOutAddress: Address;
-  amount: bigint;
-  sellDecimals: number;
-  buyDecimals: number;
-  quoteType: "exactIn" | "exactOut";
-}
-
-export interface QuoteResult {
-  quotedAmount: bigint;
-  slippage: number | null;
-}
-
+/**
+ * Returns a swap quote from the Uniswap v4 Quoter.
+ *
+ * The function supports two modes via `quoteType`:
+ *  • `exactIn`  – you provide the amount you are SELLING and get how much you
+ *                 will RECEIVE.
+ *  • `exactOut` – you provide the amount you want to RECEIVE and get how much
+ *                 you need to SELL.
+ *
+ * The calculation is performed off-chain by calling the view method on the
+ * Quoter contract, which replicates the pool maths (including fees and tick
+ * spacing) without executing a real swap.
+ *
+ * Parameters
+ * ----------
+ * @param publicClient   viem PublicClient already connected to Sepolia.
+ * @param tokenInAddress Address of the token being sold (ETH can be the zero address).
+ * @param tokenOutAddress Address of the token being bought.
+ * @param amount         Amount (in *raw* units, i.e. 10^decimals) for the quote.
+ * @param sellDecimals   Decimals of `tokenInAddress`.
+ * @param buyDecimals    Decimals of `tokenOutAddress`.
+ * @param quoteType      "exactIn" | "exactOut" – defines direction of the quote.
+ *
+ * Returns
+ * -------
+ * A `QuoteResult` with:
+ * • `quotedAmount` – bigint amount in *raw* units returned by the contract.
+ * • `slippage`     – percentage difference between on-chain quote and the
+ *                    expected mid-price (null when not computable).
+ *
+ * A `null` value is returned when `publicClient` is undefined/mis-configured.
+ */
 export async function getSwapQuote({
   publicClient,
   tokenInAddress,
@@ -32,6 +64,10 @@ export async function getSwapQuote({
   buyDecimals,
   quoteType,
 }: QuoteParams): Promise<QuoteResult | null> {
+  // If amount is 0, return 0 quoted amount and no slippage
+  if (amount === 0n) return { quotedAmount: 0n, slippage: null };
+
+  // If publicClient is not available, return null
   const url = publicClient?.transport?.url;
   if (!publicClient || !url) {
     console.error("Public client or transport URL is not available.");
@@ -40,17 +76,11 @@ export async function getSwapQuote({
 
   const provider = new ethers.JsonRpcProvider(url);
   const quoter = new ethers.Contract(QUOTER_ADDRESS, quoterAbi, provider);
-
-  if (amount === 0n) {
-    return { quotedAmount: 0n, slippage: null };
-  }
-
   const [currency0, currency1] = 
     tokenInAddress.toLowerCase() < tokenOutAddress.toLowerCase()
       ? [tokenInAddress, tokenOutAddress]
       : [tokenOutAddress, tokenInAddress];
   const zeroForOne = tokenInAddress.toLowerCase() === currency0.toLowerCase();
-
   const paramsBase = (exactAmount: bigint) => ({
     poolKey: {
       currency0,

@@ -4,9 +4,8 @@ import { formatUnits } from 'viem'
 import type { Abi } from 'viem'
 import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi'
 import { useState, useEffect } from 'react'
-
-import { useTokenStore } from '../../store/token'
 import erc20Abi from '../../abis/erc20'
+import { USDT_ADDRESS, USDT_DECIMALS } from '../../config/blockchain'
 
 interface ClaimAlertProps {
   onClaimed?: () => void
@@ -14,7 +13,6 @@ interface ClaimAlertProps {
 
 export default function ClaimAlert({ onClaimed }: ClaimAlertProps) {
   const { address } = useAccount()
-  const { usdtAddress, usdtDecimals } = useTokenStore()
   const { writeContractAsync } = useWriteContract()
   const [isTxPending, setIsTxPending] = useState(false)
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>()
@@ -32,7 +30,7 @@ export default function ClaimAlert({ onClaimed }: ClaimAlertProps) {
     refetch,
   } = useReadContract({
     abi: erc20Abi as Abi,
-    address: usdtAddress,
+    address: USDT_ADDRESS,
     functionName: 'claimable',
     args: [address as `0x${string}`],
     query: {
@@ -65,7 +63,7 @@ export default function ClaimAlert({ onClaimed }: ClaimAlertProps) {
 
   if (isClaimableError || !claimable || claimable === 0n) return null
 
-  const claimableAmount = Number(formatUnits(claimable as bigint, usdtDecimals))
+  const claimableAmount = Number(formatUnits(claimable as bigint, USDT_DECIMALS))
 
   const handleClaim = async () => {
     if (!address) return
@@ -73,7 +71,7 @@ export default function ClaimAlert({ onClaimed }: ClaimAlertProps) {
       setIsTxPending(true)
       const hash = await writeContractAsync({
         abi: erc20Abi as Abi,
-        address: usdtAddress,
+        address: USDT_ADDRESS,
         functionName: 'claim',
         args: [claimable as bigint],
       })

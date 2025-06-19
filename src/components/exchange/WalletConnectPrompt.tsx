@@ -1,5 +1,5 @@
 import { Card, Text } from "@chakra-ui/react";
-import WalletConnectButton from "./WalletConnectButton";
+import WalletConnectButton from "../common/WalletConnectButton";
 
 /**
  * Prompt card shown when wallet is not connected.
