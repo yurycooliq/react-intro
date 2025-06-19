@@ -1,18 +1,27 @@
-import { useState, useEffect, useCallback } from "react"; // useMemo removed
-import { Card, Button, Stack, Grid, Center, IconButton, Text } from "@chakra-ui/react";
+import { useState, useEffect, useCallback } from "react";
+import {
+  Card,
+  Button,
+  Stack,
+  Grid,
+  Center,
+  IconButton,
+  Text,
+} from "@chakra-ui/react";
 import TokenAmountField from "../common/TokenAmountField";
 import { LuArrowDown, LuRocket } from "react-icons/lu";
-import { erc20Abi, type Address, zeroAddress, type PublicClient } from "viem"; // quoterAbi, ethers, ZeroAddress removed, viemZeroAddress added
+import type { PublicClient } from "viem";
 import { useAccount, usePublicClient } from "wagmi";
-import { useTokenStore } from "../../store/token";
+import { getBalances } from "../../services/balancesService";
 import ClaimAlert from "../common/ClaimAlert";
 import { getSwapQuote } from "../../services/quoteService";
-
-type Currency = "ETH" | "USDT";
-
-interface ExchangeFormProps {
-  onStart: (currency: Currency, amount: string, minOut: string) => void;
-}
+import {
+  ETH_DECIMALS,
+  USDT_DECIMALS,
+  USDT_ADDRESS,
+  ETH_ADDRESS,
+} from "../../config/blockchain";
+import type { Currency, ExchangeFormProps } from "../../interfaces";
 
 export default function ExchangeForm({ onStart }: ExchangeFormProps) {
   const [currency, setCurrency] = useState<Currency>("ETH");
@@ -20,62 +29,83 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
 
   const { address } = useAccount();
   const publicClient = usePublicClient();
-  const { usdtAddress, usdtDecimals } = useTokenStore();
 
   const [ethBalance, setEthBalance] = useState<bigint>();
   const [usdtBalance, setUsdtBalance] = useState<bigint>();
+  const [buyAmount, setBuyAmount] = useState<bigint>(0n);
+  const [lastEdited, setLastEdited] = useState<"sell" | "buy">("sell");
+  const [slippage, setSlippage] = useState<number | null>(null);
+  const [isQuoting, setIsQuoting] = useState<boolean>(false);
+  const [sellValid, setSellValid] = useState<boolean>(true);
+  const [buyValid, setBuyValid] = useState<boolean>(true);
+  const [rotated, setRotated] = useState(false);
+
+  const isValidAmount = amount > 0n;
+  const buyTokenSymbol: Currency = currency === "ETH" ? "USDT" : "ETH";
+  const buyTokenDecimals =
+    buyTokenSymbol === "ETH" ? ETH_DECIMALS : USDT_DECIMALS;
+  const buttonLabel = `Swap ${currency} to ${buyTokenSymbol}${
+    slippage !== null ? ` with ${slippage.toFixed(2)}% slippage` : ""
+  }`;
+  const hasQuote = buyAmount > 0n && slippage !== null;
+  const hasEnoughBalance =
+    currency === "ETH"
+      ? ethBalance !== undefined && amount <= (ethBalance ?? 0n)
+      : usdtBalance !== undefined && amount <= (usdtBalance ?? 0n);
+  const canSwap =
+    isValidAmount &&
+    hasQuote &&
+    hasEnoughBalance &&
+    sellValid &&
+    buyValid &&
+    !isQuoting;
+
+  const handleSwapClick = () => {
+    setCurrency((prev) => (prev === "ETH" ? "USDT" : "ETH"));
+    setRotated((prev) => !prev);
+    setAmount(0n);
+    setBuyAmount(0n);
+    setSlippage(null);
+  };
+  const handleSellAmountChange = (v: bigint) => {
+    setAmount(v);
+    setLastEdited("sell");
+  };
+  const handleBuyAmountChange = (v: bigint) => {
+    setBuyAmount(v);
+    setLastEdited("buy");
+  };
+  const handleExchangeClick = () => {
+    if (!isValidAmount) return;
+    onStart(currency, amount.toString(), buyAmount.toString());
+  };
 
   const fetchBalances = useCallback(async () => {
     if (!address || !publicClient) return;
     try {
-      const [ethRes, usdtRes] = await Promise.allSettled([
-        publicClient.getBalance({ address }),
-        publicClient.readContract({
-          address: usdtAddress,
-          abi: erc20Abi,
-          functionName: "balanceOf",
-          args: [address],
-        }) as Promise<bigint>,
-      ]);
-      if (ethRes.status === "fulfilled") setEthBalance(ethRes.value);
-      if (usdtRes.status === "fulfilled")
-        setUsdtBalance(usdtRes.value as bigint);
+      const { ethBalance, usdtBalance } = await getBalances({
+        address,
+        publicClient,
+      });
+      if (ethBalance !== undefined) setEthBalance(ethBalance);
+      if (usdtBalance !== undefined) setUsdtBalance(usdtBalance);
     } catch (err) {
       console.error("Failed to fetch balances", err);
     }
-  }, [address, publicClient, usdtAddress]);
+  }, [address, publicClient]);
 
   useEffect(() => {
     fetchBalances();
     const id = setInterval(fetchBalances, 2000);
     return () => clearInterval(id);
   }, [fetchBalances]);
-  const isValidAmount = amount > 0n;
-  const [rotated, setRotated] = useState(false);
-  const buyTokenSymbol: Currency = currency === "ETH" ? "USDT" : "ETH";
-  const buyTokenDecimals = buyTokenSymbol === "ETH" ? 18 : usdtDecimals;
-
-  const [buyAmount, setBuyAmount] = useState<bigint>(0n);
-  const [lastEdited, setLastEdited] = useState<'sell' | 'buy'>('sell');
-  const [slippage, setSlippage] = useState<number | null>(null);
-  const [isQuoting, setIsQuoting] = useState<boolean>(false);
-  const [sellValid, setSellValid] = useState<boolean>(true);
-  const [buyValid, setBuyValid] = useState<boolean>(true);
-
-  const buttonLabel = `Swap ${currency} to ${buyTokenSymbol}${
-    slippage !== null ? ` with ${slippage.toFixed(2)}% slippage` : ""
-  }`;
-
-  const hasQuote = buyAmount > 0n && slippage !== null;
-  const hasEnoughBalance =
-    currency === "ETH"
-      ? ethBalance !== undefined && amount <= (ethBalance ?? 0n)
-      : usdtBalance !== undefined && amount <= (usdtBalance ?? 0n);
-  const canSwap = isValidAmount && hasQuote && hasEnoughBalance && sellValid && buyValid && !isQuoting;
 
   useEffect(() => {
     const fetchQuoteAsync = async (client: PublicClient) => {
-      if ((lastEdited === 'sell' && amount === 0n) || (lastEdited === 'buy' && buyAmount === 0n)) {
+      if (
+        (lastEdited === "sell" && amount === 0n) ||
+        (lastEdited === "buy" && buyAmount === 0n)
+      ) {
         setBuyAmount(0n);
         setSlippage(null);
         return;
@@ -84,37 +114,41 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
       setIsQuoting(true);
       setSlippage(null);
 
-      const ETH_ADDRESS = zeroAddress as Address;
-      const tokenIn = currency === "ETH" ? ETH_ADDRESS : usdtAddress;
-      const tokenOut = currency === "ETH" ? usdtAddress : ETH_ADDRESS;
-      const currentSellDecimals = currency === "ETH" ? 18 : usdtDecimals;
-      const currentBuyDecimals = buyTokenSymbol === "ETH" ? 18 : usdtDecimals;
+      const tokenIn = currency === "ETH" ? ETH_ADDRESS : USDT_ADDRESS;
+      const tokenOut = currency === "ETH" ? USDT_ADDRESS : ETH_ADDRESS;
+      const currentSellDecimals =
+        currency === "ETH" ? ETH_DECIMALS : USDT_DECIMALS;
+      const currentBuyDecimals =
+        buyTokenSymbol === "ETH" ? ETH_DECIMALS : USDT_DECIMALS;
 
       try {
         const result = await getSwapQuote({
           publicClient: client,
           tokenInAddress: tokenIn,
           tokenOutAddress: tokenOut,
-          amount: lastEdited === 'sell' ? amount : buyAmount,
+          amount: lastEdited === "sell" ? amount : buyAmount,
           sellDecimals: currentSellDecimals,
           buyDecimals: currentBuyDecimals,
-          quoteType: lastEdited === 'sell' ? 'exactIn' : 'exactOut' as 'exactIn' | 'exactOut',
+          quoteType:
+            lastEdited === "sell"
+              ? "exactIn"
+              : ("exactOut" as "exactIn" | "exactOut"),
         });
         if (result) {
-          if (lastEdited === 'sell') {
+          if (lastEdited === "sell") {
             setBuyAmount(result.quotedAmount);
           } else {
             setAmount(result.quotedAmount);
           }
           setSlippage(result.slippage);
         } else {
-          if (lastEdited === 'sell') setBuyAmount(0n);
+          if (lastEdited === "sell") setBuyAmount(0n);
           else setAmount(0n);
           setSlippage(null);
         }
       } catch (error) {
         console.error("Failed to fetch quote from service:", error);
-        if (lastEdited === 'sell') setBuyAmount(0n);
+        if (lastEdited === "sell") setBuyAmount(0n);
         else setAmount(0n);
         setSlippage(null);
       }
@@ -124,40 +158,10 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
     if (publicClient) {
       fetchQuoteAsync(publicClient);
     }
-  }, [publicClient, amount, buyAmount, currency, usdtAddress, usdtDecimals, lastEdited, buyTokenSymbol]); 
-
-
-  const handleSwapClick = () => {
-    setCurrency((prev) => (prev === "ETH" ? "USDT" : "ETH"));
-    setRotated((prev) => !prev);
-    setAmount(0n);
-    setBuyAmount(0n);
-    setSlippage(null);
-  };
-
-  const handleSellAmountChange = (v: bigint) => {
-    setAmount(v)
-    setLastEdited('sell')
-  }
-
-  const handleBuyAmountChange = (v: bigint) => {
-    setBuyAmount(v)
-    setLastEdited('buy')
-  }
-
-  const handleExchangeClick = () => {
-    if (!isValidAmount) return;
-    onStart(currency, amount.toString(), buyAmount.toString());
-  };
+  }, [publicClient, amount, buyAmount, currency, lastEdited, buyTokenSymbol]);
 
   return (
-    <Card.Root
-      w="full"
-      maxW="md"
-      rounded="xl"
-      shadow="lg"
-      color="white"
-    >
+    <Card.Root w="full" maxW="md" rounded="xl" shadow="lg" color="white">
       <Card.Header>
         <Text fontSize="lg" fontWeight="bold">
           Swap with 🦄Uniswap v4
@@ -186,7 +190,7 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
               value={amount}
               onChange={handleSellAmountChange}
               tokenSymbol={currency}
-              decimals={currency === "ETH" ? 18 : usdtDecimals}
+              decimals={currency === "ETH" ? ETH_DECIMALS : USDT_DECIMALS}
               balance={currency === "ETH" ? ethBalance : usdtBalance}
               onValidChange={setSellValid}
             />
@@ -206,7 +210,7 @@ export default function ExchangeForm({ onStart }: ExchangeFormProps) {
       <Card.Footer>
         <Button
           w="full"
-          variant="outline"
+          variant="solid"
           colorPalette="blue"
           loading={isQuoting}
           loadingText="Estimating slippage..."

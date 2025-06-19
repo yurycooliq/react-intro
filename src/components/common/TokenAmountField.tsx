@@ -1,22 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Field, Input, InputGroup, Flex } from '@chakra-ui/react'
 import { formatUnits, parseUnits } from 'viem'
-
-interface TokenAmountFieldProps {
-  /** Current value of the input in base (integer) units */
-  value: bigint
-  /** Called every time a **valid** value is entered */
-  onChange: (value: bigint) => void
-  /** Token symbol to show as the right-hand addon, e.g. ETH */
-  tokenSymbol: string
-  /** Number of fraction digits – defaults to 18 */
-  decimals?: number
-  /** Wallet balance – used for copy-to-input and max-value validation  */
-  onValidChange?: (valid: boolean) => void
-  balance?: bigint
-  /** true → buying mode (label 'Buy', balance non-clickable); false → selling mode */
-  buyMode?: boolean
-}
+import type { TokenAmountFieldProps } from '../../interfaces'
 
 /**
  * Generic field for entering token amounts.

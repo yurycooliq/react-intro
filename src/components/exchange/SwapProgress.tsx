@@ -16,20 +16,7 @@ import {
   useConfig,
 } from "wagmi";
 import { formatEther } from "viem";
-
-export type Currency = "ETH" | "USDT";
-
-interface SwapProgressProps {
-  currency: Currency;
-  amount: string;
-  minOut: string;
-}
-
-interface LogEntry {
-  text: string;
-  variant: "info" | "success" | "error";
-  hash?: `0x${string}`;
-}
+import type { SwapProgressProps, LogEntry } from "../../interfaces";
 
 export default function SwapProgress({
   currency,
@@ -44,6 +31,25 @@ export default function SwapProgress({
   const config = useConfig();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const hasStarted = useRef(false);
+  const explorer = (hash: `0x${string}`) =>
+    `https://sepolia.etherscan.io/tx/${hash}`;
+  const isLastLog = (index: number): boolean => index === logs.length - 1;
+  const getColor = (variant: LogEntry["variant"], index: number): string => {
+    switch (variant) {
+      case "error":
+        return "red.500";
+      case "info":
+        return isLastLog(index) ? "gray.400" : "green.500";
+      case "success":
+        return "green.500";
+    }
+  };
+  const getIcon = (variant: LogEntry["variant"], index: number) => {
+    if (variant === "error") return <LuCircleX />;
+    if (variant === "info")
+      return isLastLog(index) ? <LuCircleDashed className="spin" /> : <LuCircleCheck />;
+    return <LuCircleCheck />;
+  };
 
   useEffect(() => {
     if (hasStarted.current) return;
@@ -107,29 +113,8 @@ export default function SwapProgress({
     chainId,
     signTypedDataAsync,
     publicClient,
-    config, // Add config to dependency array
+    config,
   ]);
-
-  const explorer = (hash: `0x${string}`) =>
-    `https://sepolia.etherscan.io/tx/${hash}`;
-
-  const isLastLog = (index: number): boolean => index === logs.length - 1;
-  const getColor = (variant: LogEntry["variant"], index: number): string => {
-    switch (variant) {
-      case "error":
-        return "red.500";
-      case "info":
-        return isLastLog(index) ? "gray.400" : "green.500";
-      case "success":
-        return "green.500";
-    }
-  };
-  const getIcon = (variant: LogEntry["variant"], index: number) => {
-    if (variant === "error") return <LuCircleX />;
-    if (variant === "info")
-      return isLastLog(index) ? <LuCircleDashed /> : <LuCircleCheck />;
-    return <LuCircleCheck />;
-  };
 
   return (
     <Card.Root w="360px" rounded="xl" shadow="lg" color="white">
