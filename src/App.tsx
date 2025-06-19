@@ -6,12 +6,17 @@ import ExchangeForm from './components/exchange/ExchangeForm'
 import SwapProgress from './components/exchange/SwapProgress'
 
 function App() {
-  const { address } = useAccount()
-
-  const [view, setView] = useState<'initial' | 'form' | 'progress' | 'completed'>('initial')
-  const [params, setParams] = useState<{ currency: 'ETH' | 'USDT'; amount: string; minOut: string } | null>(
-    null
-  )
+  const { address } = useAccount();
+  const [view, setView] = useState<"initial" | "form" | "progress">("initial");
+  const [params, setParams] = useState<{
+    currency: Currency;
+    amount: string;
+    minOut: string;
+  } | null>(null);
+  const handleStart = (currency: Currency, amount: string, minOut: string) => {
+    setParams({ currency, amount, minOut });
+    setView("progress");
+  };
 
   useEffect(() => {
     if (!address) {
@@ -20,11 +25,6 @@ function App() {
     }
     setView('form')
   }, [address])
-
-  const handleStart = (currency: 'ETH' | 'USDT', amount: string, minOut: string) => {
-    setParams({ currency, amount, minOut })
-    setView('progress')
-  }
 
   return (
     <Box minH="100vh" bgGradient="linear(to-b, gray.900, gray.800)" p={4} color="white">
